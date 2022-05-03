@@ -1,4 +1,4 @@
-cd('C:\Users\sando\Dropbox\Ganguly_Lab\Code\touchscreen-co\Touchscreen\target_chase_v2')
+cd('C:\Users\sando\Documents\target_chase')
 
 % Clear the workspace and the screen
 sca;
@@ -6,6 +6,7 @@ close all;
 clear;
 
 Screen('Preference', 'ConserveVRAM', 4096);
+Screen('Preference', 'SkipSyncTests', 1);
 
 self = [];
 self.t_start = GetSecs;
@@ -86,6 +87,8 @@ Priority(topPriorityLevel);
 if exist([last_param_path 'most_recent_target_chase_params.mat'])
   load([last_param_path 'most_recent_target_chase_params.mat']);
   params_prev = params;
+else
+  params = [];
 end
 
 % load the screen parameters
@@ -115,7 +118,7 @@ try
   Screen('FillRect', self.w, row_bg_col', row_bg_rect);
   
   % Draw the welcome text
-  Screen('TextSize', self.w, 0.9*row_height); % make the welcome line really big
+  Screen('TextSize', self.w, round(0.9*row_height)); % make the welcome line really big
   DrawFormattedText(self.w, 'WELCOME! MAKE A SELECTION IN EACH ROW', ...
     'center', 'center', [1 1 1], [], 0, 0, 1, 0, row_bg_rect(:, 1)');
  
@@ -123,7 +126,7 @@ try
   % justified
   title_x = 0.2*self.res.width;
   title_rect = [row_bg_rect(1:2, :); repmat(title_x, 1, n_rows); row_bg_rect(4, :)];
-  Screen('TextSize', self.w, 0.75*row_height); % make the titles medium sized
+  Screen('TextSize', self.w, round(0.75*row_height)); % make the titles medium sized
   for p = 1:n_params_shown
     DrawFormattedText(self.w, param_info(i_params_shown(p)).title, ...
       'right', 'center', [1 1 0], [], 0, 0, 1, 0, title_rect(:, p+1)');
@@ -132,7 +135,7 @@ try
   % With the remaining right half of the screen, make a n_row x 10 grid and
   % fill the options into each point on the grid. If there are more than 10
   % options, then space the options evenly
-  Screen('TextSize', self.w, 0.4*row_height); % make the options small sized
+  Screen('TextSize', self.w, round(0.4*row_height)); % make the options small sized
   opt_chosen = zeros(1, n_params_shown);
   opts_rect = nan(n_params_shown, max_opts, 4);
   for p = 1:n_params_shown
@@ -173,7 +176,7 @@ try
 
   % Draw the play button
   Screen('FillRect', self.w, [0.5 0.5 0.5], row_bg_rect(:, end)');
-  Screen('TextSize', self.w, 0.9*row_height); % make the play text really big
+  Screen('TextSize', self.w, round(0.9*row_height)); % make the play text really big
   DrawFormattedText(self.w, 'PLAY TARGET CHASE', ...
     'center', 'center', [1 1 1], [], 0, 0, 1, 0, row_bg_rect(:, end)');
   
@@ -645,74 +648,80 @@ FSM.idle_exit.stop = 'end_game';
 self.FSM = FSM;
 
 %% PRELOAD SOUNDS
-wavfilenames = {'reward1.wav', 'reward2.wav', 'C.wav', 'DoorBell.wav'};
-nfiles = length(wavfilenames);
-
-% Always init to 2 channels, for the sake of simplicity:
-nrchannels = 2;
-
-% Perform basic initialization of the sound driver:
-InitializePsychSound(1);
-
-% Open the audio 'device' with default mode [] (== Only playback),
-% and a required latencyclass of 1 == standard low-latency mode, as well as
-% default playback frequency and 'nrchannels' sound output channels.
-% This returns a handle 'pahandle' to the audio device:
-self.pahandle = PsychPortAudio('Open', [], [], 1, [], nrchannels);
-
-% Get what frequency we are actually using for playback:
-self.soundstatus = PsychPortAudio('GetStatus', self.pahandle);
-freq = self.soundstatus.SampleRate;
-
-% Read all sound files and create & fill one dynamic audiobuffer for
-% each read soundfile:
-self.sounds = [];
-j = 0;
-
-for i=1:nfiles
-  try
-    % Make sure we don't abort if we encounter an unreadable sound
-    % file. This is achieved by the try-catch clauses...
-    [audiodata, infreq] = psychwavread(char(wavfilenames(i)));
-    dontskip = 1;
-  catch
-    fprintf('Failed to read and add file %s. Skipped.\n', char(wavfilenames(i)));
-    dontskip = 0;
-    psychlasterror
-    psychlasterror('reset');
-  end
-
-  if dontskip
-    j = j + 1;
-
-    % Resampling supported. Check if needed:
-    if infreq ~= freq
-      % Need to resample this to target frequency 'freq':
-      fprintf('Resampling from %i Hz to %i Hz... ', infreq, freq);
-      audiodata = resample(audiodata, freq, infreq);
+if false
+    wavfilenames = {'reward1.wav', 'reward2.wav', 'C.wav', 'DoorBell.wav'};
+    nfiles = length(wavfilenames);
+    
+    % Always init to 2 channels, for the sake of simplicity:
+    nrchannels = 2;
+    
+    % Perform basic initialization of the sound driver:
+    InitializePsychSound(1);
+    
+    % Open the audio 'device' with default mode [] (== Only playback),
+    % and a required latencyclass of 1 == standard low-latency mode, as well as
+    % default playback frequency and 'nrchannels' sound output channels.
+    % This returns a handle 'pahandle' to the audio device:
+    self.pahandle = PsychPortAudio('Open', [], [], 1, [], nrchannels);
+    
+    % Get what frequency we are actually using for playback:
+    self.soundstatus = PsychPortAudio('GetStatus', self.pahandle);
+    freq = self.soundstatus.SampleRate;
+    
+    % Read all sound files and create & fill one dynamic audiobuffer for
+    % each read soundfile:
+    self.sounds = [];
+    j = 0;
+    
+    for i=1:nfiles
+      try
+        % Make sure we don't abort if we encounter an unreadable sound
+        % file. This is achieved by the try-catch clauses...
+        [audiodata, infreq] = psychwavread(char(wavfilenames(i)));
+        dontskip = 1;
+      catch
+        fprintf('Failed to read and add file %s. Skipped.\n', char(wavfilenames(i)));
+        dontskip = 0;
+        psychlasterror
+        psychlasterror('reset');
+      end
+    
+      if dontskip
+        j = j + 1;
+    
+        % Resampling supported. Check if needed:
+        if infreq ~= freq
+          % Need to resample this to target frequency 'freq':
+          fprintf('Resampling from %i Hz to %i Hz... ', infreq, freq);
+          audiodata = resample(audiodata, freq, infreq);
+        end
+    
+        [samplecount, ninchannels] = size(audiodata);
+        audiodata = repmat(transpose(audiodata), nrchannels / ninchannels, 1);
+    
+        self.sounds(end+1) = PsychPortAudio('CreateBuffer', [], audiodata); %#ok<AGROW>
+        [fpath, fname] = fileparts(char(wavfilenames(j)));
+        fprintf('Filling audiobuffer handle %i with soundfile %s ...\n', self.sounds(j), fname);
+      end
     end
+    
+    % Enable use of sound schedules: We create a schedule of default size,
+    % currently 128 slots by default. From now on, the driver will not play
+    % back the sounds stored via PsychPortAudio('FillBuffer') anymore. Instead
+    % you'll have to define a "playlist" or schedule via subsequent calls to
+    % PsychPortAudio('AddToSchedule'). Then the driver will process that
+    % schedule by playing all defined sounds in the schedule, one after each
+    % other, until the end of the schedule is reached. You can add new items to
+    % the schedule while the schedule is already playing.
+    PsychPortAudio('UseSchedule', self.pahandle, 1);
+    
+    % Maximize volume
+    PsychPortAudio('Volume', self.pahandle, 1);
 
-    [samplecount, ninchannels] = size(audiodata);
-    audiodata = repmat(transpose(audiodata), nrchannels / ninchannels, 1);
-
-    self.sounds(end+1) = PsychPortAudio('CreateBuffer', [], audiodata); %#ok<AGROW>
-    [fpath, fname] = fileparts(char(wavfilenames(j)));
-    fprintf('Filling audiobuffer handle %i with soundfile %s ...\n', self.sounds(j), fname);
-  end
+    self.is_audioPort = true;
+else
+    self.is_audioPort = false;
 end
-
-% Enable use of sound schedules: We create a schedule of default size,
-% currently 128 slots by default. From now on, the driver will not play
-% back the sounds stored via PsychPortAudio('FillBuffer') anymore. Instead
-% you'll have to define a "playlist" or schedule via subsequent calls to
-% PsychPortAudio('AddToSchedule'). Then the driver will process that
-% schedule by playing all defined sounds in the schedule, one after each
-% other, until the end of the schedule is reached. You can add new items to
-% the schedule while the schedule is already playing.
-PsychPortAudio('UseSchedule', self.pahandle, 1);
-
-% Maximize volume
-PsychPortAudio('Volume', self.pahandle, 1);
 
 %% INITIALIZE SOME VARIABLES
 self.target_index = 1;
@@ -818,7 +827,9 @@ end
 
 %% STOP THE ISCAN, KINEMATIC CAMERAS, AND AUDIO
 % Stop playback: Stop immediately, but wait for stop to happen:
-PsychPortAudio('Stop', self.pahandle, 0, 1);
+if self.is_audioPort
+    PsychPortAudio('Stop', self.pahandle, 0, 1);
+end
 
 % Stop kinematic cameras
 if self.is_camtrigPort
@@ -1747,28 +1758,30 @@ end
 
 %% SOUND PLAYING SHORTCUT
 function self = playsound(self, sound_ix)
-  % Query current playback status:
-  self.soundstatus = PsychPortAudio('GetStatus', self.pahandle);
-  
-  % Engine still running on a schedule?
-  if self.soundstatus.Active == 1
-    PsychPortAudio('Stop', self.pahandle, 0, 1);
-  end
-  
-%   if self.soundstatus.Active == 0
-    % Schedule finished, engine stopped. Before adding new
-    % slots we first must delete the old ones, ie., reset the
-    % schedule:
-  PsychPortAudio('UseSchedule', self.pahandle, 2);
-  
-%   end
-  % Add new slot with playback request for user-selected buffer
-  % to a still running or stopped and reset empty schedule. This
-  % time we select one repetition of the full soundbuffer:
-  PsychPortAudio('AddToSchedule', self.pahandle, self.sounds(sound_ix), 1, 0, [], 1);
-  
-%   if self.soundstatus.Active == 0
-%     % If engine has stopped, we need to restart:
-  PsychPortAudio('Start', self.pahandle, [], 0, 1);
-%   end
+    if self.is_audioPort
+        % Query current playback status:
+        self.soundstatus = PsychPortAudio('GetStatus', self.pahandle);
+    
+        % Engine still running on a schedule?
+        if self.soundstatus.Active == 1
+            PsychPortAudio('Stop', self.pahandle, 0, 1);
+        end
+    
+        %   if self.soundstatus.Active == 0
+        % Schedule finished, engine stopped. Before adding new
+        % slots we first must delete the old ones, ie., reset the
+        % schedule:
+        PsychPortAudio('UseSchedule', self.pahandle, 2);
+    
+        %   end
+        % Add new slot with playback request for user-selected buffer
+        % to a still running or stopped and reset empty schedule. This
+        % time we select one repetition of the full soundbuffer:
+        PsychPortAudio('AddToSchedule', self.pahandle, self.sounds(sound_ix), 1, 0, [], 1);
+    
+        %   if self.soundstatus.Active == 0
+        %     % If engine has stopped, we need to restart:
+        PsychPortAudio('Start', self.pahandle, [], 0, 1);
+        %   end
+    end
 end
