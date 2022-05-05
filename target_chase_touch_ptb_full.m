@@ -70,7 +70,6 @@ else
   info = GetTouchDeviceInfo(self.dev);
   disp(info);
 end
-input_mode = 'mouse';
 
 % Define black and white
 white = WhiteIndex(screenId);
