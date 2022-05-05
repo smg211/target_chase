@@ -52,11 +52,11 @@ if width_mm == 522 && height_mm == 326
 end
 self.res = Screen('Resolution', screenId);
 self.res.pix_per_cm = round(10*min([self.res.width/width_mm self.res.height/height_mm]));
-self.raise_botton_edge_by_px = cm2pix(raise_botton_edge_by_mm/10, self.res);
+self.raise_bottom_edge_by_px = cm2pix(raise_botton_edge_by_mm/10, self.res);
 self.nudge_left_edge_in_by_px = cm2pix(nudge_left_edge_in_by_mm/10, self.res);
 self.nudge_right_edge_in_by_px = cm2pix(nudge_right_edge_in_by_mm/10, self.res);
 self.res.effective_width = self.res.width - self.nudge_left_edge_in_by_px - self.nudge_right_edge_in_by_px;
-self.res.effective_height = self.res.height - self.raise_botton_edge_by_px;
+self.res.effective_height = self.res.height - self.raise_bottom_edge_by_px;
 
 % Get first touchscreen:
 self.dev = min(GetTouchDeviceIndices([], 1));
@@ -70,6 +70,7 @@ else
   info = GetTouchDeviceInfo(self.dev);
   disp(info);
 end
+input_mode = 'mouse';
 
 % Define black and white
 white = WhiteIndex(screenId);
@@ -113,7 +114,7 @@ for p = 1:n_params
 end
 
 n_rows = (n_params_shown+2);
-row_height = (self.res.height - self.raise_botton_edge_by_px)/n_rows;
+row_height = (self.res.height - self.raise_bottom_edge_by_px)/n_rows;
 row_edges = 0:row_height:(n_rows*row_height);
 row_centers = (row_height/2):row_height:self.res.height;
 
@@ -141,15 +142,15 @@ try
       'right', 'center', [1 1 0], [], 0, 0, 1, 0, title_rect(:, p+1)');
   end
 
-  % With the remaining right half of the screen, make a n_row x 10 grid and
-  % fill the options into each point on the grid. If there are more than 10
+  % With the remaining right half of the screen, make a n_row x 8 grid and
+  % fill the options into each point on the grid. If there are more than 8
   % options, then space the options evenly
   Screen('TextSize', self.w, round(0.4*row_height)); % make the options small sized
   opt_chosen = zeros(1, n_params_shown);
   opts_rect = nan(n_params_shown, max_opts, 4);
   for p = 1:n_params_shown
-    if param_info(i_params_shown(p)).Nopts <= 10
-      n_win = 10;
+    if param_info(i_params_shown(p)).Nopts <= 8
+      n_win = 8;
     else
       n_win = param_info(i_params_shown(p)).Nopts;
     end
@@ -198,6 +199,7 @@ catch
 end
 
 %% INTERACT WITH THE SETTINGS SCREEN
+hit_escape = false;
 t_param_selected = zeros(1, n_params);
 try
   if strcmp(input_mode, 'touch')
@@ -215,7 +217,8 @@ try
   % is pressed
   play_pressed = false;
   
-  while ~KbCheck && ~play_pressed
+  while ~hit_escape && ~play_pressed
+    hit_escape = KbCheck;
     if strcmp(input_mode, 'touch')
       self = process_touch_events(self);
 
@@ -225,9 +228,9 @@ try
     
       % if there is a click, see if it happens in the target area
       if buttons(1)
-        self.curs_active{1}.x = x;
-        self.curs_active{1}.y = y;
-        self.curs_active{1}.type = 2; 
+        self.curs_active(1).x = x;
+        self.curs_active(1).y = y;
+        self.curs_active(1).type = 2; 
       else
         self.curs_active = {};
       end
@@ -794,34 +797,39 @@ else
   check_str{6} = 'NO';
 end
 
-x_check_title = cm2pix(-10, self.res) + self.res.width/2;
-x_check_str = cm2pix(10, self.res) + self.res.width/2;
-y_check = linspace(-height_mm/20+7, height_mm/20-5, length(stats_title));
+x_check_title = self.res.effective_width/5 + self.nudge_left_edge_in_by_px;
+x_check_str = 3*self.res.effective_width/5 + self.nudge_left_edge_in_by_px;
+y_check_bottom = 4*self.res.effective_height/5 - self.raise_bottom_edge_by_px;
+y_check_top = self.res.effective_height/5 - self.raise_bottom_edge_by_px;
+y_check = linspace(y_check_top, y_check_bottom, length(check_title));
 
-Screen('TextSize', self.w, round(cm2pix(1, self.res)));
-for s = 1:length(stats_title)
+Screen('TextSize', self.w, round(self.res.effective_height/20));
+for s = 1:length(check_title)
   if strcmp(check_str{s}, 'YES')
     textCol = [0 1 0];
   else
     textCol = [1 0 0];
   end
   DrawFormattedText(self.w, check_title{s}, ...
-    x_check_title, cm2pix(y_check(s), self.res) + self.res.height/2, textCol);
-  DrawFormattedText(self.w, stats_str{s}, ...
-    x_check_str, cm2pix(y_check(s), self.res) + self.res.height/2, textCol);
+    x_check_title, y_check(s), textCol);
+  DrawFormattedText(self.w, check_str{s}, ...
+    x_check_str, y_check(s), textCol);
 end
 
 % Draw the start button
 start_position_cm = [width_mm/20 - 1.5 - nudge_right_edge_in_by_mm/10, height_mm/20 - 2.5];
-start_position_px = cm2pix(start_position_px, self.res);
+start_position_px = cm2pix(start_position_cm, self.res);
 
 startRectBase = [0 0 self.res.effective_width/10 self.res.effective_height/10];
 startRect = CenterRectOnPointd(startRectBase, ...
   start_position_px(1), start_position_px(2));
 Screen('FrameRect', self.w, [0.15 0.15 0.15], startRect, 4);
+Screen('TextSize', self.w, round(self.res.effective_height/50));
 DrawFormattedText(self.w, 'Touch to Start', 'center', 'center', ...
   [0.15 0.15 0.15], [], 0, 0, 1, 0, startRect);
 
+% Flip to the screen
+Screen('Flip', self.w, 0, 1);
 
 try
   if strcmp(input_mode, 'touch')
@@ -834,18 +842,13 @@ try
 
   % Only ESCape allows to exit the game:
   RestrictKeysForKbCheck(KbName('ESCAPE'));
-  
-  % DRAW THE TEXT
-  Screen('TextSize', self.w, round(cm2pix(1, self.res))); % make the welcome line really big
-  DrawFormattedText(self.w, 'DONE SAVING (OK TO QUIT)', ...
-    'center', cm2pix(-height_mm/20+5, self.res) + self.res.height/2, [0 1 0]);
-  
 
   % Loop the animation until the escape key is pressed or the play button
   % is pressed
   play_pressed = false;
   
-  while ~KbCheck && ~play_pressed
+  while ~hit_escape && ~play_pressed
+    hit_escape = KbCheck;
     if strcmp(input_mode, 'touch')
       self = process_touch_events(self);
 
@@ -855,47 +858,20 @@ try
     
       % if there is a click, see if it happens in the target area
       if buttons(1)
-        self.curs_active{1}.x = x;
-        self.curs_active{1}.y = y;
-        self.curs_active{1}.type = 2; 
+        self.curs_active(1).x = x;
+        self.curs_active(1).y = y;
+        self.curs_active(1).type = 2; 
       else
-        self.curs_active = {};
+        self.curs_active = [];
       end
     end
     
-    opt_click_id = [];
     for id = 1:length(self.curs_active)
-      if ~isempty(self.curs_active(id))
-        % if there is a touch, see what setting it was for
-        [flag, i_param, i_opt] = check_if_click_in_rect([self.curs_active(id).x, self.curs_active(id).y], opts_rect);
-        if flag && GetSecs - t_param_selected(i_param) > 0.5
-          t_param_selected(i_param) = GetSecs;
-          is_deselect = false;
-          if opt_chosen(i_param) > 0
-            % remove the old rectangle
-            Screen('FrameRect', self.w, row_bg_col(i_param+1, :), squeeze(opts_rect(i_param, opt_chosen(i_param), :))', 4);
-            if opt_chosen(i_param) == i_opt
-              is_deselect = true;
-              opt_chosen(i_param) = 0;
-              params.(param_info(i_params_shown(i_param)).varname) = [];
-            end
-          end
-          if ~is_deselect
-            opt_chosen(i_param) = i_opt;
-            Screen('FrameRect', self.w, [1 0 0], squeeze(opts_rect(i_param, i_opt, :))', 4);
-            params.(param_info(i_params_shown(i_param)).varname) = param_info(i_params_shown(i_param)).opts_varname{i_opt};
-          end
-        end
-        if all(opt_chosen(find([param_info.require_selection])) > 0)
-          if check_if_click_in_rect([self.curs_active(id).x, self.curs_active(id).y], row_bg_rect(:, end))
-            play_pressed = true;
-          end
-        end
+      [play_pressed, ~, ~] = check_if_click_in_rect([self.curs_active(id).x, self.curs_active(id).y], startRect);
+      if play_pressed
+        break
       end
     end
-
-    % Flip to the screen
-    Screen('Flip', self.w, 0, 1);
   end
   
   if strcmp(input_mode, 'touch')
@@ -927,173 +903,13 @@ self.t_next_collect = GetSecs + data_collection_interval;
 data_ix = 0;
 
 %% START THE GAME
-try
-  if strcmp(params.input_mode, 'touch')
-    initialize_touch(self);
-  end
-  
-    % initialize struct for tracking active touch points:
-  self.curs_active = [];
-  self.curs_id_min = inf;
-
-  % Only ESCape allows to exit the game:
-  RestrictKeysForKbCheck(KbName('ESCAPE'));
-
-  % Loop the animation until the escape key is pressed or the exit buttons
-  % are pressed
-  while ~strcmp(self.state, 'end_game')
-    if strcmp(params.input_mode, 'touch')
-      self = process_touch_events(self);
-
-    elseif strcmp(params.input_mode, 'mouse')
-      % Get the position of the mouse
-      [x, y, buttons] = GetMouse(screenId);
-    
-      % if there is a click, see if it happens in the target area
-      if buttons(1)
-        self.curs_active(1).x = x;
-        self.curs_active(1).y = y;
-        self.curs_active(1).type = 2; 
-      else
-        self.curs_active = [];
-      end
-    end
-    
-    % Run the update function
-    self = update(self, params);
-
-    % collect the data
-    if GetSecs > self.t_next_collect
-      self.t_next_collect = GetSecs + data_collection_interval;
-
-      data_ix = data_ix+1;
-
-      data.state{data_ix} = self.state;
-      if isempty(self.curs_active)
-        data.cursor(:, :, data_ix) = nan(2, 10);
-        data.cursor_ids(:, data_ix) = nan(10, 1);
-      else
-        data.cursor(:, :, data_ix) = [[[self.curs_active.x]; [self.curs_active.y]] nan(2, 10-length(self.curs_active))];
-        data.cursor_ids(:, data_ix) = [[self.curs_active.id]'; nan(10-length(self.curs_active), 1)];
-      end
-      data.target_pos(:, data_ix) = self.active_target_position';
-      data.time(data_ix) = GetSecs - self.t_start;
-
-      % Send DIO trigger
-      if self.is_dioPort
-        % FIXME: need to figure out how to send data_ix information
-%         writeline(self.dioPort, ['d' num2str(rem(data_ix, 256))]);
-        writeline(self.dioPort, 'd');
-      end
-    end
-
-%     if strcmp(self.state, params.save_state) && ...
-%         self.state_length > params.t_state_save && ...
-%         GetSecs > self.t_next_save
-%       raw = data;
-%       raw.cursor = pix2cm_batch(raw.cursor, self.res);
-%       raw.target_pos = pix2cm_batch(raw.target_pos, self.res);
-%       save([filename '.mat'], 'raw', '-v7.3');
-% 
-%       self.t_next_save = GetSecs + params.save_interval;
-%     end
-  end
-  
-  if strcmp(params.input_mode, 'touch')
-    wrapup_touch(self);
-  end
-catch
-  % Save the data
-  raw = data;
-  raw.cursor = pix2cm_batch(raw.cursor, self.res);
-  raw.target_pos = pix2cm_batch(raw.target_pos, self.res);
-  save([filename '.mat'], 'raw', '-v7.3');
-
-  TouchQueueRelease(self.dev);
-  RestrictKeysForKbCheck([]);
-  sca;
-  psychrethrow(psychlasterror);
-end
-
-%% STOP THE ISCAN, KINEMATIC CAMERAS, AND AUDIO
-% Stop playback: Stop immediately, but wait for stop to happen:
-if self.is_audioPort
-    PsychPortAudio('Stop', self.pahandle, 0, 1);
-end
-
-% Stop kinematic cameras
-if self.is_camtrigPort
-  writeline(self.camtrigPort, '0');
-end
-
-% Stop ISCAN recording
-if self.is_iscanPort
-  writeline(self.iscanPort, 'e');
-end
-
-%% DISPLAY THE SESSION SUMMARY SCREEN AND SAVE THE DATA
-stats_title = {'Trials Started: ', 'Trials Correct: ', 'Percent Correct: ', ...
-  'Target Hold Time: ', 'Target Radius: ', 'Max Reward Time: '};
-stats_str{1} = num2str(self.trials_started);
-stats_str{2} = num2str(self.trials_correct);
-stats_str{3} = [num2str(round(100*self.trials_correct/self.trials_started)) ' %'];
-stats_str{4} = [num2str(params.target_hold_time) ' sec'];
-stats_str{5} = [num2str(params.target_rad) ' cm'];
-stats_str{6} = [num2str(params.last_targ_reward) ' sec'];
-
-x_stat_title = cm2pix(-10, self.res) + self.res.width/2;
-x_stat_str = cm2pix(10, self.res) + self.res.width/2;
-y_stat = linspace(-height_mm/20+7, height_mm/20-5, length(stats_title));
-
-Screen('TextSize', self.w, round(cm2pix(1, self.res)));
-for s = 1:length(stats_title)
-  DrawFormattedText(self.w, stats_title{s}, ...
-    x_stat_title, cm2pix(y_stat(s), self.res) + self.res.height/2, [0.5 0.5 0.5]);
-  DrawFormattedText(self.w, stats_str{s}, ...
-    x_stat_str, cm2pix(y_stat(s), self.res) + self.res.height/2, [0.5 0.5 0.5]);
-end
-
-% DRAW THE SAVING HEADER
-Screen('TextSize', self.w, round(cm2pix(3, self.res))); % make the welcome line really big
-DrawFormattedText(self.w, 'SAVING DATA. DO NOT QUIT!', ...
-  'center', cm2pix(-height_mm/20+5, self.res) + self.res.height/2, [1 0 0]);
-
-% Flip to the screen
-Screen('Flip', self.w, 0);
-
-% Save the data
-raw = data;
-raw.cursor = pix2cm_batch(raw.cursor, self.res);
-raw.target_pos = pix2cm_batch(raw.target_pos, self.res);
-save([filename '.mat'], 'raw', '-v7.3');
-
-% Rewrite the stats but change the header to allow for quitting
-Screen('TextSize', self.w, round(cm2pix(1, self.res)));
-for s = 1:length(stats_title)
-  DrawFormattedText(self.w, stats_title{s}, ...
-    x_stat_title, cm2pix(y_stat(s), self.res) + self.res.height/2, [0.5 0.5 0.5]);
-  DrawFormattedText(self.w, stats_str{s}, ...
-    x_stat_str, cm2pix(y_stat(s), self.res) + self.res.height/2, [0.5 0.5 0.5]);
-end
-
-if self.idle
-  % DRAW THE SAVING HEADER
-  Screen('TextSize', self.w, round(cm2pix(3, self.res))); % make the welcome line really big
-  DrawFormattedText(self.w, 'DONE SAVING (OK TO QUIT)', ...
-    'center', cm2pix(-height_mm/20+5, self.res) + self.res.height/2, [0 1 0]);
-  
-  draw_pd_and_exit_targs(self, params);
-  
-  % Flip to the screen
-  Screen('Flip', self.w, 0);
-  
-  % wait for exit buttons to be pressed
+if ~hit_escape
   try
     if strcmp(params.input_mode, 'touch')
       initialize_touch(self);
     end
     
-    % initialize struct for tracking active touch points:
+      % initialize struct for tracking active touch points:
     self.curs_active = [];
     self.curs_id_min = inf;
   
@@ -1102,9 +918,7 @@ if self.idle
   
     % Loop the animation until the escape key is pressed or the exit buttons
     % are pressed
-    exit_pressed = false;
-  
-    while ~KbCheck && ~exit_pressed
+    while ~strcmp(self.state, 'end_game')
       if strcmp(params.input_mode, 'touch')
         self = process_touch_events(self);
   
@@ -1122,20 +936,186 @@ if self.idle
         end
       end
       
-      [exit_pressed, self] = exit_buttons_held(self, params);
-    end
+      % Run the update function
+      self = update(self, params);
   
+      % collect the data
+      if GetSecs > self.t_next_collect
+        self.t_next_collect = GetSecs + data_collection_interval;
+  
+        data_ix = data_ix+1;
+  
+        data.state{data_ix} = self.state;
+        if isempty(self.curs_active)
+          data.cursor(:, :, data_ix) = nan(2, 10);
+          data.cursor_ids(:, data_ix) = nan(10, 1);
+        else
+          data.cursor(:, :, data_ix) = [[[self.curs_active.x]; [self.curs_active.y]] nan(2, 10-length(self.curs_active))];
+          data.cursor_ids(:, data_ix) = [[self.curs_active.id]'; nan(10-length(self.curs_active), 1)];
+        end
+        data.target_pos(:, data_ix) = self.active_target_position';
+        data.time(data_ix) = GetSecs - self.t_start;
+  
+        % Send DIO trigger
+        if self.is_dioPort
+          % FIXME: need to figure out how to send data_ix information
+  %         writeline(self.dioPort, ['d' num2str(rem(data_ix, 256))]);
+          writeline(self.dioPort, 'd');
+        end
+      end
+  
+  %     if strcmp(self.state, params.save_state) && ...
+  %         self.state_length > params.t_state_save && ...
+  %         GetSecs > self.t_next_save
+  %       raw = data;
+  %       raw.cursor = pix2cm_batch(raw.cursor, self.res);
+  %       raw.target_pos = pix2cm_batch(raw.target_pos, self.res);
+  %       save([filename '.mat'], 'raw', '-v7.3');
+  % 
+  %       self.t_next_save = GetSecs + params.save_interval;
+  %     end
+    end
+    
     if strcmp(params.input_mode, 'touch')
       wrapup_touch(self);
     end
-  
-    RestrictKeysForKbCheck([]);
-    sca;
   catch
+    % Save the data
+    raw = data;
+    raw.cursor = pix2cm_batch(raw.cursor, self.res);
+    raw.target_pos = pix2cm_batch(raw.target_pos, self.res);
+    save([filename '.mat'], 'raw', '-v7.3');
+  
     TouchQueueRelease(self.dev);
     RestrictKeysForKbCheck([]);
     sca;
     psychrethrow(psychlasterror);
+  end
+  
+  %% STOP THE ISCAN, KINEMATIC CAMERAS, AND AUDIO
+  % Stop playback: Stop immediately, but wait for stop to happen:
+  if self.is_audioPort
+      PsychPortAudio('Stop', self.pahandle, 0, 1);
+  end
+  
+  % Stop kinematic cameras
+  if self.is_camtrigPort
+    writeline(self.camtrigPort, '0');
+  end
+  
+  % Stop ISCAN recording
+  if self.is_iscanPort
+    writeline(self.iscanPort, 'e');
+  end
+  
+  %% DISPLAY THE SESSION SUMMARY SCREEN AND SAVE THE DATA
+  stats_title = {'Trials Started: ', 'Trials Correct: ', 'Percent Correct: ', ...
+    'Target Hold Time: ', 'Target Radius: ', 'Max Reward Time: '};
+  stats_str{1} = num2str(self.trials_started);
+  stats_str{2} = num2str(self.trials_correct);
+  stats_str{3} = [num2str(round(100*self.trials_correct/self.trials_started)) ' %'];
+  stats_str{4} = [num2str(params.target_hold_time) ' sec'];
+  stats_str{5} = [num2str(params.target_rad) ' cm'];
+  stats_str{6} = [num2str(params.last_targ_reward) ' sec'];
+  
+  x_stat_title = cm2pix(-10, self.res) + self.res.width/2;
+  x_stat_str = cm2pix(10, self.res) + self.res.width/2;
+  y_stat = linspace(-height_mm/20+7, height_mm/20-5, length(stats_title));
+  
+  Screen('TextSize', self.w, round(cm2pix(1, self.res)));
+  for s = 1:length(stats_title)
+    DrawFormattedText(self.w, stats_title{s}, ...
+      x_stat_title, cm2pix(y_stat(s), self.res) + self.res.height/2, [0.5 0.5 0.5]);
+    DrawFormattedText(self.w, stats_str{s}, ...
+      x_stat_str, cm2pix(y_stat(s), self.res) + self.res.height/2, [0.5 0.5 0.5]);
+  end
+  
+  % DRAW THE SAVING HEADER
+  Screen('TextSize', self.w, round(cm2pix(3, self.res))); % make the welcome line really big
+  DrawFormattedText(self.w, 'SAVING DATA. DO NOT QUIT!', ...
+    'center', cm2pix(-height_mm/20+5, self.res) + self.res.height/2, [1 0 0]);
+  
+  % Flip to the screen
+  Screen('Flip', self.w, 0);
+  
+  % Save the data
+  raw = data;
+  raw.cursor = pix2cm_batch(raw.cursor, self.res);
+  raw.target_pos = pix2cm_batch(raw.target_pos, self.res);
+  save([filename '.mat'], 'raw', '-v7.3');
+  
+  % Rewrite the stats but change the header to allow for quitting
+  Screen('TextSize', self.w, round(cm2pix(1, self.res)));
+  for s = 1:length(stats_title)
+    DrawFormattedText(self.w, stats_title{s}, ...
+      x_stat_title, cm2pix(y_stat(s), self.res) + self.res.height/2, [0.5 0.5 0.5]);
+    DrawFormattedText(self.w, stats_str{s}, ...
+      x_stat_str, cm2pix(y_stat(s), self.res) + self.res.height/2, [0.5 0.5 0.5]);
+  end
+  
+  if self.idle
+    % DRAW THE SAVING HEADER
+    Screen('TextSize', self.w, round(cm2pix(3, self.res))); % make the welcome line really big
+    DrawFormattedText(self.w, 'DONE SAVING (OK TO QUIT)', ...
+      'center', cm2pix(-height_mm/20+5, self.res) + self.res.height/2, [0 1 0]);
+    
+    draw_pd_and_exit_targs(self, params);
+    
+    % Flip to the screen
+    Screen('Flip', self.w, 0);
+    
+    % wait for exit buttons to be pressed
+    try
+      if strcmp(params.input_mode, 'touch')
+        initialize_touch(self);
+      end
+      
+      % initialize struct for tracking active touch points:
+      self.curs_active = [];
+      self.curs_id_min = inf;
+    
+      % Only ESCape allows to exit the game:
+      RestrictKeysForKbCheck(KbName('ESCAPE'));
+    
+      % Loop the animation until the escape key is pressed or the exit buttons
+      % are pressed
+      exit_pressed = false;
+    
+      while ~KbCheck && ~exit_pressed
+        if strcmp(params.input_mode, 'touch')
+          self = process_touch_events(self);
+    
+        elseif strcmp(params.input_mode, 'mouse')
+          % Get the position of the mouse
+          [x, y, buttons] = GetMouse(screenId);
+        
+          % if there is a click, see if it happens in the target area
+          if buttons(1)
+            self.curs_active(1).x = x;
+            self.curs_active(1).y = y;
+            self.curs_active(1).type = 2; 
+          else
+            self.curs_active = [];
+          end
+        end
+        
+        [exit_pressed, self] = exit_buttons_held(self, params);
+      end
+    
+      if strcmp(params.input_mode, 'touch')
+        wrapup_touch(self);
+      end
+    
+      RestrictKeysForKbCheck([]);
+      sca;
+    catch
+      TouchQueueRelease(self.dev);
+      RestrictKeysForKbCheck([]);
+      sca;
+      psychrethrow(psychlasterror);
+    end
+  else
+    sca;
   end
 else
   sca;
@@ -1210,6 +1190,8 @@ function [flag, i, j] = check_if_click_in_rect(mouse_pos, rect)
   if size(rect, 1) == 1 || size(rect, 2) == 1
     flag = mouse_pos(1)>= rect(1) && mouse_pos(1)< rect(3) && ...
       mouse_pos(2)>= rect(2) && mouse_pos(2)< rect(4);
+    i = 1;
+    j = 1;
   else
     if any(mouse_pos(1)>= rect(:, :, 1) & mouse_pos(1)< rect(:, :, 3) & ...
       mouse_pos(2)>= rect(:, :, 2) & mouse_pos(2)< rect(:, :, 4), 'all')
