@@ -1,4 +1,8 @@
-cd('C:\Users\sando\Documents\target_chase')
+try
+  cd('C:\Users\sando\Documents\target_chase')
+catch
+  cd('C:\Users\sando\Dropbox\Ganguly_Lab\Code\target_chase')
+end
 
 % Clear the workspace and the screen
 sca;
@@ -7,6 +11,10 @@ clear;
 
 Screen('Preference', 'ConserveVRAM', 4096);
 Screen('Preference', 'SkipSyncTests', 1);
+
+raise_botton_edge_by_mm = 15;
+nudge_left_edge_in_by_mm = 30;
+nudge_right_edge_in_by_mm = 30;
 
 self = [];
 self.t_start = GetSecs;
@@ -18,7 +26,7 @@ if ispc
   if any(strfind(cwd, 'sando'))
     user = 'sando';
     last_param_path = 'C:\Users\sando\Documents\';
-    data_path = 'C:\Users\sando\Documents\target_chase\';
+    data_path = 'C:\Users\sando\Box\Data\NHP_BehavioralData\target_chase\';
   end
 end
 
@@ -29,17 +37,29 @@ end
 % Here we call some default settings for setting up Psychtoolbox
 PsychDefaultSetup(2);
 
-% If no user-specified 'dev' was given, try to auto-select:
-self.dev = [];
-if isempty(self.dev)
-  % Get first touchscreen:
-  self.dev = min(GetTouchDeviceIndices([], 1));
-end
+% Get the screen numbers
+screens = Screen('Screens');
 
-if isempty(self.dev)
-  % Get first touchpad:
-  self.dev = min(GetTouchDeviceIndices([], 0));
+% Draw to the external screen if avaliable
+screenId = max(screens);
+
+% Get the screen size and resolution
+[width_mm, height_mm] = Screen('DisplaySize', screenId); % this is wrong
+% when using SuperDisplay on the tablet, so we need to manually adjust
+if width_mm == 522 && height_mm == 326
+  width_mm = 314;
+  height_mm = 196;
 end
+self.res = Screen('Resolution', screenId);
+self.res.pix_per_cm = round(10*min([self.res.width/width_mm self.res.height/height_mm]));
+self.raise_botton_edge_by_px = cm2pix(raise_botton_edge_by_mm/10, self.res);
+self.nudge_left_edge_in_by_px = cm2pix(nudge_left_edge_in_by_mm/10, self.res);
+self.nudge_right_edge_in_by_px = cm2pix(nudge_right_edge_in_by_mm/10, self.res);
+self.res.effective_width = self.res.width - self.nudge_left_edge_in_by_px - self.nudge_right_edge_in_by_px;
+self.res.effective_height = self.res.height - self.raise_botton_edge_by_px;
+
+% Get first touchscreen:
+self.dev = min(GetTouchDeviceIndices([], 1));
 
 if isempty(self.dev) || ~ismember(self.dev, GetTouchDeviceIndices)
   fprintf('No touch input device found, or invalid dev given. Using mouse instead.\n');
@@ -50,17 +70,6 @@ else
   info = GetTouchDeviceInfo(self.dev);
   disp(info);
 end
-
-% Get the screen numbers
-screens = Screen('Screens');
-
-% Draw to the external screen if avaliable
-screenId = max(screens);
-
-% Get the screen size and resolution
-[width_mm, height_mm] = Screen('DisplaySize', screenId);
-self.res = Screen('Resolution', screenId);
-self.res.pix_per_cm = round(10*min([self.res.width/width_mm self.res.height/height_mm]));
 
 % Define black and white
 white = WhiteIndex(screenId);
@@ -104,8 +113,8 @@ for p = 1:n_params
 end
 
 n_rows = (n_params_shown+2);
-row_height = self.res.height/n_rows;
-row_edges = 0:row_height:self.res.height;
+row_height = (self.res.height - self.raise_botton_edge_by_px)/n_rows;
+row_edges = 0:row_height:(n_rows*row_height);
 row_centers = (row_height/2):row_height:self.res.height;
 
 try
@@ -124,7 +133,7 @@ try
  
   % List all of the param titles on the left side of the screen, right
   % justified
-  title_x = 0.2*self.res.width;
+  title_x = self.nudge_left_edge_in_by_px + 0.2*(self.res.effective_width);
   title_rect = [row_bg_rect(1:2, :); repmat(title_x, 1, n_rows); row_bg_rect(4, :)];
   Screen('TextSize', self.w, round(0.75*row_height)); % make the titles medium sized
   for p = 1:n_params_shown
@@ -144,7 +153,7 @@ try
     else
       n_win = param_info(i_params_shown(p)).Nopts;
     end
-    opts_edges = linspace(title_x, self.res.width, n_win+2);
+    opts_edges = linspace(title_x, (self.res.width-self.nudge_right_edge_in_by_px), n_win+2);
     opts_win_width = mode(diff(opts_edges));
     opts_edges = opts_edges-opts_win_width/2;
 
@@ -337,10 +346,13 @@ end
 
 % is there reward scaling?
 if params.min_targ_reward > 0
-  do_rewardScaling = true;
+  self.do_rewardScaling = true;
 else
-  do_rewardScaling = false;
+  self.do_rewardScaling = false;
 end
+
+% add the constant bottom screen raise to the one specified in the settings
+params.effective_screen_bot = params.screen_bot + raise_botton_edge_by_mm/10;
 
 %% GET TARGET POSITIONS
 
@@ -350,8 +362,8 @@ params.seq_poss = seq_poss;
 
 % determine the center position and distance from center to top/bottom
 params.center_position(1) = 0;
-params.center_position(2) = params.screen_bot/2 - params.screen_top/2;
-params.grid_spacing = (height_mm/10 - params.screen_top - params.screen_bot)/2 - params.effective_target_rad;
+params.center_position(2) = params.effective_screen_bot/2 - params.screen_top/2;
+params.grid_spacing = (height_mm/10 - params.screen_top - params.effective_screen_bot)/2 - params.effective_target_rad;
 
 % specify the target position strings associated with each sequence type
 if isstr(params.seq)
@@ -436,6 +448,25 @@ self.target_radius_px = cm2pix(params.target_rad, self.res);
 
 self.num_targets = length(~isnan(self.target_positions_cm(:, 1)));
 
+%% determine time thresholds for reward amounts
+if strcmp(params.animal_name, 'butters')
+  targ1on2touch_fast = 0.9;
+  targon2touch_fast = 0.5;
+  targon2touch_slow = 0.6;
+elseif strcmp(params.animal_name, 'fifi')
+  targ1on2touch_fast = 0.65;
+  targon2touch_fast = 0.45;
+  targon2touch_slow = 0.55;
+else 
+  targ1on2touch_fast = 0.7;
+  targon2touch_fast = 0.45;
+  targon2touch_slow = 0.6;
+end
+params.time_thresh_for_max_rew = ...
+  targ1on2touch_fast+targon2touch_fast*(self.num_targets-1)+params.intertarg_delay*(self.num_targets-1);
+params.time_thresh_for_min_rew = ...
+  targ1on2touch_fast+targon2touch_slow*(self.num_targets-1)+params.intertarg_delay*(self.num_targets-1);
+
 %% SETUP THE SERIAL COMMUNICATION PORTS
 % Juicer
 try
@@ -454,6 +485,7 @@ try
       end
     end
     self.rewardPort = serialport(prolific_com, 19200);
+    configureTerminator(self.rewardPort, "CR");
 
     % Setup the flow rate
     writeline(self.rewardPort, 'VOL 0.5');
@@ -468,7 +500,9 @@ end
 
 % DIO
 try
-  self.dioPort = serialport('COM3', 115200);
+  self.dioPort = serialport('COM7', 115200);
+  configureTerminator(self.dioPort,"CR/LF");
+
   self.is_dioPort = true;
 catch
   self.is_dioPort = false;
@@ -476,13 +510,11 @@ end
 
 % Camera Triggers
 try
-  self.camtrigPort = serialport('COM3', 9600);
+  self.camtrigPort = serialport('COM8', 9600);
+  configureTerminator(self.camtrigPort,"CR/LF");
   
   % say hello
   writeline(self.camtrigPort, 'a');
-
-  % start cams at 50 Hz
-  writeline(self.camtrigPort, '1');
 
   self.is_camtrigPort = true;
 catch
@@ -491,7 +523,8 @@ end
 
 % Eyetracker Triggers
 try
-  self.iscanPort = serialport('COM3', 115200);
+  self.iscanPort = serialport('COM6', 115200);
+  configureTerminator(self.iscanPort,"CR/LF");
 
   % send start recording trigger
   writeline(self.iscanPort, 's');
@@ -503,7 +536,8 @@ end
 
 % External Button
 try
-  self.buttonPort = serialport('COM3', 9600);
+  self.buttonPort = serialport('COM10', 9600);
+  configureTerminator(self.buttonPort,"CR/LF");
   
   self.is_buttonPort = true;
 catch
@@ -521,8 +555,8 @@ self.targColor = [1 1 0];
 
 % escape buttons positions: 1.5cm from the right edge and 2.5cm from the
 % top/bottom
-exit_positions_cm = [width_mm/20 - 1.5, height_mm/20 - 2.5; ...
-  width_mm/20 - 1.5, -(height_mm/20 - 2.5)]; 
+exit_positions_cm = [width_mm/20 - 1.5 - nudge_right_edge_in_by_mm/10, height_mm/20 - 2.5; ...
+  width_mm/20 - nudge_right_edge_in_by_mm/10 - 1.5, (-height_mm/20 + raise_botton_edge_by_mm/10 + 2.5)]; 
 self.exit_positions_px = cm2pix(exit_positions_cm, self.res);
 self.exit_radius_px = cm2pix(1, self.res);
 
@@ -534,10 +568,11 @@ for i = 1:2
 end
 self.exitColor = [0.15 0.15 0.15];
 
-% photodiode position: 1.8 cm from the right edge and 0.5 cm from the top
-pd_position_cm = [width_mm/20 - 1.8, -height_mm/20 + 0.5];
+% photodiode position: 1.8 cm from the right edge and 1.5 cm from the top
+pd_position_cm = [width_mm/20 - 2.1, ...
+  height_mm/20 - 2.3];
 self.pd_position_px = cm2pix(pd_position_cm, self.res);
-self.pd_radius_px = cm2pix(0.5, self.res);
+self.pd_radius_px = cm2pix(0.4, self.res);
 
 pdRectBase = [0 0 2*self.pd_radius_px 2*self.pd_radius_px];
 self.pdDiameter = max(pdRectBase) * 1.01;
@@ -546,8 +581,8 @@ self.pdRect = CenterRectOnPointd(pdRectBase, ...
 self.pdColor = [0.75 0.75 0.75];
 
 % Outlines construction
-x_cm = params.center_position(1) + -params.grid_spacing:params.grid_spacing:params.grid_spacing;
-y_cm = params.center_position(2) + -params.grid_spacing:params.grid_spacing:params.grid_spacing;
+x_cm = params.center_position(1) + [-params.grid_spacing:params.grid_spacing:params.grid_spacing];
+y_cm = params.center_position(2) + [-params.grid_spacing:params.grid_spacing:params.grid_spacing];
 
 self.outlinesRect = nan(4, 9);
 i = 0;
@@ -648,79 +683,233 @@ FSM.idle_exit.stop = 'end_game';
 self.FSM = FSM;
 
 %% PRELOAD SOUNDS
-if false
-    wavfilenames = {'reward1.wav', 'reward2.wav', 'C.wav', 'DoorBell.wav'};
-    nfiles = length(wavfilenames);
-    
-    % Always init to 2 channels, for the sake of simplicity:
-    nrchannels = 2;
-    
-    % Perform basic initialization of the sound driver:
-    InitializePsychSound(1);
-    
-    % Open the audio 'device' with default mode [] (== Only playback),
-    % and a required latencyclass of 1 == standard low-latency mode, as well as
-    % default playback frequency and 'nrchannels' sound output channels.
-    % This returns a handle 'pahandle' to the audio device:
-    self.pahandle = PsychPortAudio('Open', [], [], 1, [], nrchannels);
-    
-    % Get what frequency we are actually using for playback:
-    self.soundstatus = PsychPortAudio('GetStatus', self.pahandle);
-    freq = self.soundstatus.SampleRate;
-    
-    % Read all sound files and create & fill one dynamic audiobuffer for
-    % each read soundfile:
-    self.sounds = [];
-    j = 0;
-    
-    for i=1:nfiles
-      try
-        % Make sure we don't abort if we encounter an unreadable sound
-        % file. This is achieved by the try-catch clauses...
-        [audiodata, infreq] = psychwavread(char(wavfilenames(i)));
-        dontskip = 1;
-      catch
-        fprintf('Failed to read and add file %s. Skipped.\n', char(wavfilenames(i)));
-        dontskip = 0;
-        psychlasterror
-        psychlasterror('reset');
+try
+  wavfilenames = {'reward1.wav', 'reward2.wav', 'C.wav', 'DoorBell.wav'};
+  nfiles = length(wavfilenames);
+
+  % Always init to 2 channels, for the sake of simplicity:
+  nrchannels = 2;
+
+  % Perform basic initialization of the sound driver:
+  InitializePsychSound(1);
+
+  % Open the audio 'device' with default mode [] (== Only playback),
+  % and a required latencyclass of 1 == standard low-latency mode, as well as
+  % default playback frequency and 'nrchannels' sound output channels.
+  % This returns a handle 'pahandle' to the audio device:
+  self.pahandle = PsychPortAudio('Open', 2, [], 1, [], nrchannels);
+
+  % Get what frequency we are actually using for playback:
+  self.soundstatus = PsychPortAudio('GetStatus', self.pahandle);
+  freq = self.soundstatus.SampleRate;
+
+  % Read all sound files and create & fill one dynamic audiobuffer for
+  % each read soundfile:
+  self.sounds = [];
+  j = 0;
+
+  for i=1:nfiles
+    try
+      % Make sure we don't abort if we encounter an unreadable sound
+      % file. This is achieved by the try-catch clauses...
+      [audiodata, infreq] = psychwavread(char(wavfilenames(i)));
+      dontskip = 1;
+    catch
+      fprintf('Failed to read and add file %s. Skipped.\n', char(wavfilenames(i)));
+      dontskip = 0;
+      psychlasterror
+      psychlasterror('reset');
+    end
+
+    if dontskip
+      j = j + 1;
+
+      % Resampling supported. Check if needed:
+      if infreq ~= freq
+        % Need to resample this to target frequency 'freq':
+        fprintf('Resampling from %i Hz to %i Hz... ', infreq, freq);
+        audiodata = resample(audiodata, freq, infreq);
       end
+
+      [samplecount, ninchannels] = size(audiodata);
+      audiodata = repmat(transpose(audiodata), nrchannels / ninchannels, 1);
+
+      self.sounds(end+1) = PsychPortAudio('CreateBuffer', [], audiodata); %#ok<AGROW>
+      [fpath, fname] = fileparts(char(wavfilenames(j)));
+      fprintf('Filling audiobuffer handle %i with soundfile %s ...\n', self.sounds(j), fname);
+    end
+  end
+
+  % Enable use of sound schedules: We create a schedule of default size,
+  % currently 128 slots by default. From now on, the driver will not play
+  % back the sounds stored via PsychPortAudio('FillBuffer') anymore. Instead
+  % you'll have to define a "playlist" or schedule via subsequent calls to
+  % PsychPortAudio('AddToSchedule'). Then the driver will process that
+  % schedule by playing all defined sounds in the schedule, one after each
+  % other, until the end of the schedule is reached. You can add new items to
+  % the schedule while the schedule is already playing.
+  PsychPortAudio('UseSchedule', self.pahandle, 1);
+
+  % Maximize volume
+  PsychPortAudio('Volume', self.pahandle, 1);
+
+  self.is_audioPort = true;
+catch
+  self.is_audioPort = false;
+  psychrethrow(psychlasterror);
+end
+
+%% ADVANCE TO THE START SCREEN
+% Display all of the port checks
+check_title = {'Juicer Connected: ', 'Button Connected: ', 'DIO Port Connected: ', ...
+  'ISCAN Port Connected: ', 'CamTrig Port Connected: ', 'Audio Port Connected: '};
+if self.is_rewardPort
+  check_str{1} = 'YES';
+else
+  check_str{1} = 'NO';
+end
+if self.is_buttonPort
+  check_str{2} = 'YES';
+else
+  check_str{2} = 'NO';
+end
+if self.is_dioPort
+  check_str{3} = 'YES';
+else
+  check_str{3} = 'NO';
+end
+if self.is_iscanPort
+  check_str{4} = 'YES';
+else
+  check_str{4} = 'NO';
+end
+if self.is_camtrigPort
+  check_str{5} = 'YES';
+else
+  check_str{5} = 'NO';
+end
+if self.is_audioPort
+  check_str{6} = 'YES';
+else
+  check_str{6} = 'NO';
+end
+
+x_check_title = cm2pix(-10, self.res) + self.res.width/2;
+x_check_str = cm2pix(10, self.res) + self.res.width/2;
+y_check = linspace(-height_mm/20+7, height_mm/20-5, length(stats_title));
+
+Screen('TextSize', self.w, round(cm2pix(1, self.res)));
+for s = 1:length(stats_title)
+  if strcmp(check_str{s}, 'YES')
+    textCol = [0 1 0];
+  else
+    textCol = [1 0 0];
+  end
+  DrawFormattedText(self.w, check_title{s}, ...
+    x_check_title, cm2pix(y_check(s), self.res) + self.res.height/2, textCol);
+  DrawFormattedText(self.w, stats_str{s}, ...
+    x_check_str, cm2pix(y_check(s), self.res) + self.res.height/2, textCol);
+end
+
+% Draw the start button
+start_position_cm = [width_mm/20 - 1.5 - nudge_right_edge_in_by_mm/10, height_mm/20 - 2.5];
+start_position_px = cm2pix(start_position_px, self.res);
+
+startRectBase = [0 0 self.res.effective_width/10 self.res.effective_height/10];
+startRect = CenterRectOnPointd(startRectBase, ...
+  start_position_px(1), start_position_px(2));
+Screen('FrameRect', self.w, [0.15 0.15 0.15], startRect, 4);
+DrawFormattedText(self.w, 'Touch to Start', 'center', 'center', ...
+  [0.15 0.15 0.15], [], 0, 0, 1, 0, startRect);
+
+
+try
+  if strcmp(input_mode, 'touch')
+    initialize_touch(self);
+  end
+
+  % initialize struct for tracking active touch points:
+  self.curs_active = {};
+  self.curs_id_min = inf;
+
+  % Only ESCape allows to exit the game:
+  RestrictKeysForKbCheck(KbName('ESCAPE'));
+  
+  % DRAW THE TEXT
+  Screen('TextSize', self.w, round(cm2pix(1, self.res))); % make the welcome line really big
+  DrawFormattedText(self.w, 'DONE SAVING (OK TO QUIT)', ...
+    'center', cm2pix(-height_mm/20+5, self.res) + self.res.height/2, [0 1 0]);
+  
+
+  % Loop the animation until the escape key is pressed or the play button
+  % is pressed
+  play_pressed = false;
+  
+  while ~KbCheck && ~play_pressed
+    if strcmp(input_mode, 'touch')
+      self = process_touch_events(self);
+
+    elseif strcmp(input_mode, 'mouse')
+      % Get the position of the mouse
+      [x, y, buttons] = GetMouse(screenId);
     
-      if dontskip
-        j = j + 1;
-    
-        % Resampling supported. Check if needed:
-        if infreq ~= freq
-          % Need to resample this to target frequency 'freq':
-          fprintf('Resampling from %i Hz to %i Hz... ', infreq, freq);
-          audiodata = resample(audiodata, freq, infreq);
-        end
-    
-        [samplecount, ninchannels] = size(audiodata);
-        audiodata = repmat(transpose(audiodata), nrchannels / ninchannels, 1);
-    
-        self.sounds(end+1) = PsychPortAudio('CreateBuffer', [], audiodata); %#ok<AGROW>
-        [fpath, fname] = fileparts(char(wavfilenames(j)));
-        fprintf('Filling audiobuffer handle %i with soundfile %s ...\n', self.sounds(j), fname);
+      % if there is a click, see if it happens in the target area
+      if buttons(1)
+        self.curs_active{1}.x = x;
+        self.curs_active{1}.y = y;
+        self.curs_active{1}.type = 2; 
+      else
+        self.curs_active = {};
       end
     end
     
-    % Enable use of sound schedules: We create a schedule of default size,
-    % currently 128 slots by default. From now on, the driver will not play
-    % back the sounds stored via PsychPortAudio('FillBuffer') anymore. Instead
-    % you'll have to define a "playlist" or schedule via subsequent calls to
-    % PsychPortAudio('AddToSchedule'). Then the driver will process that
-    % schedule by playing all defined sounds in the schedule, one after each
-    % other, until the end of the schedule is reached. You can add new items to
-    % the schedule while the schedule is already playing.
-    PsychPortAudio('UseSchedule', self.pahandle, 1);
-    
-    % Maximize volume
-    PsychPortAudio('Volume', self.pahandle, 1);
+    opt_click_id = [];
+    for id = 1:length(self.curs_active)
+      if ~isempty(self.curs_active(id))
+        % if there is a touch, see what setting it was for
+        [flag, i_param, i_opt] = check_if_click_in_rect([self.curs_active(id).x, self.curs_active(id).y], opts_rect);
+        if flag && GetSecs - t_param_selected(i_param) > 0.5
+          t_param_selected(i_param) = GetSecs;
+          is_deselect = false;
+          if opt_chosen(i_param) > 0
+            % remove the old rectangle
+            Screen('FrameRect', self.w, row_bg_col(i_param+1, :), squeeze(opts_rect(i_param, opt_chosen(i_param), :))', 4);
+            if opt_chosen(i_param) == i_opt
+              is_deselect = true;
+              opt_chosen(i_param) = 0;
+              params.(param_info(i_params_shown(i_param)).varname) = [];
+            end
+          end
+          if ~is_deselect
+            opt_chosen(i_param) = i_opt;
+            Screen('FrameRect', self.w, [1 0 0], squeeze(opts_rect(i_param, i_opt, :))', 4);
+            params.(param_info(i_params_shown(i_param)).varname) = param_info(i_params_shown(i_param)).opts_varname{i_opt};
+          end
+        end
+        if all(opt_chosen(find([param_info.require_selection])) > 0)
+          if check_if_click_in_rect([self.curs_active(id).x, self.curs_active(id).y], row_bg_rect(:, end))
+            play_pressed = true;
+          end
+        end
+      end
+    end
 
-    self.is_audioPort = true;
-else
-    self.is_audioPort = false;
+    % Flip to the screen
+    Screen('Flip', self.w, 0, 1);
+  end
+  
+  if strcmp(input_mode, 'touch')
+    wrapup_touch(self);
+  end
+
+  % Clear the screen
+  Screen('FillRect', self.w, [0 0 0]);
+  Screen('Flip', self.w, 0, 0);
+catch
+  TouchQueueRelease(self.dev);
+  RestrictKeysForKbCheck([]);
+  sca;
+  psychrethrow(psychlasterror);
 end
 
 %% INITIALIZE SOME VARIABLES
@@ -793,7 +982,8 @@ try
       % Send DIO trigger
       if self.is_dioPort
         % FIXME: need to figure out how to send data_ix information
-        writeline(self.dioPort, ['d' num2str(rem(data_ix, 256))]);
+%         writeline(self.dioPort, ['d' num2str(rem(data_ix, 256))]);
+        writeline(self.dioPort, 'd');
       end
     end
 
@@ -855,7 +1045,7 @@ x_stat_title = cm2pix(-10, self.res) + self.res.width/2;
 x_stat_str = cm2pix(10, self.res) + self.res.width/2;
 y_stat = linspace(-height_mm/20+7, height_mm/20-5, length(stats_title));
 
-Screen('TextSize', self.w, cm2pix(2, self.res));
+Screen('TextSize', self.w, round(cm2pix(1, self.res)));
 for s = 1:length(stats_title)
   DrawFormattedText(self.w, stats_title{s}, ...
     x_stat_title, cm2pix(y_stat(s), self.res) + self.res.height/2, [0.5 0.5 0.5]);
@@ -864,7 +1054,7 @@ for s = 1:length(stats_title)
 end
 
 % DRAW THE SAVING HEADER
-Screen('TextSize', self.w, cm2pix(3, self.res)); % make the welcome line really big
+Screen('TextSize', self.w, round(cm2pix(3, self.res))); % make the welcome line really big
 DrawFormattedText(self.w, 'SAVING DATA. DO NOT QUIT!', ...
   'center', cm2pix(-height_mm/20+5, self.res) + self.res.height/2, [1 0 0]);
 
@@ -878,7 +1068,7 @@ raw.target_pos = pix2cm_batch(raw.target_pos, self.res);
 save([filename '.mat'], 'raw', '-v7.3');
 
 % Rewrite the stats but change the header to allow for quitting
-Screen('TextSize', self.w, cm2pix(2, self.res));
+Screen('TextSize', self.w, round(cm2pix(1, self.res)));
 for s = 1:length(stats_title)
   DrawFormattedText(self.w, stats_title{s}, ...
     x_stat_title, cm2pix(y_stat(s), self.res) + self.res.height/2, [0.5 0.5 0.5]);
@@ -888,7 +1078,7 @@ end
 
 if self.idle
   % DRAW THE SAVING HEADER
-  Screen('TextSize', self.w, cm2pix(3, self.res)); % make the welcome line really big
+  Screen('TextSize', self.w, round(cm2pix(3, self.res))); % make the welcome line really big
   DrawFormattedText(self.w, 'DONE SAVING (OK TO QUIT)', ...
     'center', cm2pix(-height_mm/20+5, self.res) + self.res.height/2, [0 1 0]);
   
@@ -1413,8 +1603,6 @@ end
 
 %% BUTTON FUNCTIONS 
 function self = xstart_button(self, params)
-  self.button_pressed_prev = false;
- 
   % Make the photodiode dark color
   self.pdColor = [0 0 0];
   
@@ -1432,18 +1620,23 @@ function [flag, self] = button_pressed(self, params)
     flag = true;
   else
     % get the button values
+    button_data = readline(self.buttonPort);
 
     % determine if the values indicate a button press or not
     if strcmp(params.button_version, 'fsr')
-      
+      % fixme
     elseif strcmp(params.button_version, 'ir')
-      
+      if strcmp(button_data, '1')
+        flag = true;
+      else
+        flag = false;
+      end
     end
   end
 end
 
 function self = xstart_button_hold(self, params)
-  self.t_buttonhold_start = GetSecs;
+  self.t_button_hold_start = GetSecs;
   
   % Make the photodiode bright
   self.pdColor = [0 0 0];
@@ -1514,7 +1707,7 @@ function self = xstart_target(self, params)
 
     if params.intertarg_delay == 0
       % Photodiode depends on the target index
-      if rem(self.target_index, 2) == 0
+      if rem(self.target_index, 2) == 1
         self.pdColor = [1 1 1];
       else
         self.pdColor = [0 0 0];
@@ -1665,6 +1858,7 @@ function [flag, self] = finish_last_targ_hold(self, params)
   if self.target_index == self.num_targets
     if self.tht <= self.state_length
       flag = true;
+      self.trial_completion_time = GetSecs - self.t_target1_on;
     else
       flag = false;
     end
@@ -1686,9 +1880,9 @@ function self = xstart_reward(self, params)
   self.trials_correct = self.trials_correct + 1;
   self.t_reward_start = GetSecs;
   
-  if params.intertarg_delay ~= 0 || rem(self.num_targets, 2) == 1
+  if params.intertarg_delay ~= 0 || rem(self.num_targets, 2) == 0
     self.pdColor = [1 1 1];
-  elseif rem(self.num_targets, 2) == 0
+  elseif rem(self.num_targets, 2) == 1
     self.pdColor = [0 0 0];
   end
 
@@ -1699,6 +1893,18 @@ function self = xstart_reward(self, params)
 
   % play the correct trial reward sound
   self = playsound(self, 1);
+
+  % dispense the juice reward
+  if self.do_rewardScaling
+    if self.trial_completion_time < params.time_thresh_for_max_rew
+      rew_time = params.last_targ_reward;
+    else
+      rew_time = params.min_targ_reward;
+    end
+  else
+    rew_time = params.last_targ_reward;
+  end
+  write_juice_reward(self, params, rew_time);
 end
 
 function [flag, self] = end_reward(self, params)
@@ -1744,7 +1950,7 @@ function draw_pd_and_exit_targs(self, params)
 end
 
 function draw_trial_counter(self, params)
-  Screen('TextSize', self.w, cm2pix(1, self.res));
+  Screen('TextSize', self.w, round(cm2pix(1, self.res)));
   DrawFormattedText(self.w, num2str(self.trials_correct), ...
     self.trlcnt_position_px(1), self.trlcnt_position_px(2), [0.15 0.15 0.15]);
 end
@@ -1758,30 +1964,45 @@ end
 
 %% SOUND PLAYING SHORTCUT
 function self = playsound(self, sound_ix)
-    if self.is_audioPort
-        % Query current playback status:
-        self.soundstatus = PsychPortAudio('GetStatus', self.pahandle);
-    
-        % Engine still running on a schedule?
-        if self.soundstatus.Active == 1
-            PsychPortAudio('Stop', self.pahandle, 0, 1);
-        end
-    
-        %   if self.soundstatus.Active == 0
-        % Schedule finished, engine stopped. Before adding new
-        % slots we first must delete the old ones, ie., reset the
-        % schedule:
-        PsychPortAudio('UseSchedule', self.pahandle, 2);
-    
-        %   end
-        % Add new slot with playback request for user-selected buffer
-        % to a still running or stopped and reset empty schedule. This
-        % time we select one repetition of the full soundbuffer:
-        PsychPortAudio('AddToSchedule', self.pahandle, self.sounds(sound_ix), 1, 0, [], 1);
-    
-        %   if self.soundstatus.Active == 0
-        %     % If engine has stopped, we need to restart:
-        PsychPortAudio('Start', self.pahandle, [], 0, 1);
-        %   end
+  if self.is_audioPort
+    % Query current playback status:
+    self.soundstatus = PsychPortAudio('GetStatus', self.pahandle);
+  
+    % Engine still running on a schedule?
+    if self.soundstatus.Active == 1
+      PsychPortAudio('Stop', self.pahandle, 0, 1);
     end
+  
+    %   if self.soundstatus.Active == 0
+    % Schedule finished, engine stopped. Before adding new
+    % slots we first must delete the old ones, ie., reset the
+    % schedule:
+    PsychPortAudio('UseSchedule', self.pahandle, 2);
+  
+    %   end
+    % Add new slot with playback request for user-selected buffer
+    % to a still running or stopped and reset empty schedule. This
+    % time we select one repetition of the full soundbuffer:
+    PsychPortAudio('AddToSchedule', self.pahandle, self.sounds(sound_ix), 1, 0, [], 1);
+  
+    %   if self.soundstatus.Active == 0
+    %     % If engine has stopped, we need to restart:
+    PsychPortAudio('Start', self.pahandle, [], 0, 1);
+    %   end
+  end
 end
+
+%% REWARD DISPENSING
+function write_juice_reward(self, params, rew_time)
+  volume2dispense = rew_time*50/60; % mL/min x 1 min/60 sec --> sec x mL/sec
+  rew_str = sprintf(["VOL %0.1f"], volume2dispense);
+  writeline(self.rewardPort, rew_str);
+  WaitSecs(0.05);
+  writeline(self.rewardPort, "RUN");
+end
+
+
+
+
+
+

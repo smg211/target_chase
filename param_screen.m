@@ -15,7 +15,7 @@ param_info(2).opts_title = {'Old Yellow', 'New Red'};
 param_info(2).opts_varname = {'yellow', 'red'};
 param_info(2).default_opt = {'red'};
 param_info(2).require_selection = true;
-param_info(2).is_hidden = false;
+param_info(2).is_hidden = true;
 
 param_info(3).title = 'Button Type';
 param_info(3).varname = 'button_version';
@@ -92,16 +92,16 @@ param_info(11).is_hidden = false;
 
 param_info(12).title = 'Appearing Target Radius';
 param_info(12).varname = 'target_rad';
-param_info(12).opts_title = {'0.5 cm', '0.75 cm', '0.82 cm', '0.91 cm', '1.0 cm', '1.5 cm', '1.85 cm', '2.25 cm', '3.0 cm', '4.0 cm'};
-param_info(12).opts_varname = {0.5, 0.75, 0.82, 0.91, 1.0, 1.5, 1.85, 2.25, 3.0, 4.0};
+param_info(12).opts_title = {'0.5 cm', '0.75 cm', '0.82 cm', '0.91 cm', '1.0 cm', '1.5 cm', '1.9 cm', '2.25 cm', '3.0 cm', '4.0 cm'};
+param_info(12).opts_varname = {0.5, 0.75, 0.82, 0.91, 1.0, 1.5, 1.9, 2.25, 3.0, 4.0};
 param_info(12).default_opt = [];
 param_info(12).require_selection = true;
 param_info(12).is_hidden = false;
 
 param_info(13).title = 'Effective Target Radius';
 param_info(13).varname = 'effective_target_rad';
-param_info(13).opts_title = {'Same As Appears', '1.0 cm', '2.0 cm', '3.0 cm', '4.0 cm', '5.0 cm'};
-param_info(13).opts_varname = {'Same As Appears', 1, 2, 3, 4, 5};
+param_info(13).opts_title = {'Same As Appears', '1.0 cm', '2.0 cm', '2.5 cm', '3.0 cm', '4.0 cm', '5.0 cm'};
+param_info(13).opts_varname = {'Same As Appears', 1, 2, 2.5, 3, 4, 5};
 param_info(13).default_opt = 'Same As Appears';
 param_info(13).require_selection = true;
 param_info(13).is_hidden = false;
