@@ -83,10 +83,6 @@ self.baseSize = RectWidth(rect) / 20;
 % ifi = Screen('GetFlipInterval', self.w);
 ifi = 1/120;
 
-% Sync us and get a time stamp
-Screen('Flip', self.w);
-waitframes = 1;
-
 % Maximum priority level
 topPriorityLevel = MaxPriority(self.w);
 Priority(topPriorityLevel);
@@ -276,7 +272,7 @@ try
 
   % Clear the screen
   Screen('FillRect', self.w, [0 0 0]);
-  Screen('Flip', self.w, 0, 0);
+  Screen('Flip', self.w, 0, 0, 1);
 catch
   TouchQueueRelease(self.dev);
   RestrictKeysForKbCheck([]);
@@ -539,6 +535,7 @@ end
 % External Button
 try
   self.buttonPort = serialport('COM10', 9600);
+  self.buttonPort.Timeout = 0.05;
   configureTerminator(self.buttonPort,"CR/LF");
   
   self.is_buttonPort = true;
@@ -560,7 +557,7 @@ self.targColor = [1 1 0];
 exit_positions_cm = [width_mm/20 - 1.5 - nudge_right_edge_in_by_mm/10, height_mm/20 - 2.5; ...
   width_mm/20 - nudge_right_edge_in_by_mm/10 - 1.5, (-height_mm/20 + raise_botton_edge_by_mm/10 + 2.5)]; 
 self.exit_positions_px = cm2pix(exit_positions_cm, self.res);
-self.exit_radius_px = cm2pix(1, self.res);
+self.exit_radius_px = cm2pix(0.5, self.res);
 
 exitRectBase = [0 0 2*self.exit_radius_px 2*self.exit_radius_px];
 self.exitDiameter = max(exitRectBase) * 1.01;
@@ -608,7 +605,7 @@ self.trlcnt_position_px = cm2pix(trlcnt_position_cm, self.res);
 % params.save_interval = params.break_dur;
 
 % how frequently to sample the data for storing
-params.data_collection_freq = 120;
+params.data_collection_freq = 10000; %120;
 data_collection_interval = 1/params.data_collection_freq;
 
 % determine name of file
@@ -1035,7 +1032,7 @@ if ~hit_escape
     'center', cm2pix(-height_mm/20+5, self.res) + self.res.height/2, [1 0 0]);
   
   % Flip to the screen
-  Screen('Flip', self.w, 0);
+  Screen('Flip', self.w, 0, 0, 1);
   
   % Save the data
   raw = data;
@@ -1061,7 +1058,7 @@ if ~hit_escape
     draw_pd_and_exit_targs(self, params);
     
     % Flip to the screen
-    Screen('Flip', self.w, 0);
+    Screen('Flip', self.w, 0, 0, 1);
     
     % wait for exit buttons to be pressed
     try
@@ -1478,7 +1475,7 @@ function self = xstart_ITI(self, params)
   draw_pd_and_exit_targs(self, params);
 
   % Flip to the screen
-  Screen('Flip', self.w, 0);
+  Screen('Flip', self.w, 0, 0, 1);
 end
 
 
@@ -1593,7 +1590,7 @@ function self = xstart_button(self, params)
   draw_pd_and_exit_targs(self, params);
 
   % Flip to the screen
-  Screen('Flip', self.w, 0);
+  Screen('Flip', self.w, 0, 0, 1);
 end
 
 function [flag, self] = button_pressed(self, params)
@@ -1628,7 +1625,7 @@ function self = xstart_button_hold(self, params)
   draw_pd_and_exit_targs(self, params);
 
   % Flip to the screen
-  Screen('Flip', self.w, 0);
+  Screen('Flip', self.w, 0, 0, 1);
 end
 
 function [flag, self] = finish_button_hold(self, params)
@@ -1702,7 +1699,7 @@ function self = xstart_target(self, params)
     draw_pd_and_exit_targs(self, params);
   
     % Flip to the screen
-    Screen('Flip', self.w, 0);
+    Screen('Flip', self.w, 0, 0, 1);
 
     self.this_targ_drawn = true;
 
@@ -1738,7 +1735,7 @@ function self = xwhile_target(self, params)
         draw_pd_and_exit_targs(self, params);
 
         % Flip to the screen
-        Screen('Flip', self.w, 0);
+        Screen('Flip', self.w, 0, 0, 1);
 
         self.this_targ_drawn = true;
       end
@@ -1813,7 +1810,7 @@ function self = xstart_targ_hold(self, params)
     draw_pd_and_exit_targs(self, params);
 
     % Flip to the screen
-    Screen('Flip', self.w, 0);
+    Screen('Flip', self.w, 0, 0, 1);
   end
 end
 
@@ -1870,7 +1867,7 @@ function self = xstart_reward(self, params)
   % make the screen white and draw the photodiode
   Screen('FillRect', self.w, [1 1 1]);
   Screen('FillOval', self.w, self.pdColor, self.pdRect, self.pdDiameter);
-  Screen('Flip', self.w);
+  Screen('Flip', self.w, 0, 0, 1);
 
   % play the correct trial reward sound
   self = playsound(self, 1);
@@ -1896,7 +1893,7 @@ end
 function self = xstart_timeout_error(self, params)
   % make the screen black
   Screen('FillRect', self.w, [0 0 0]);
-  Screen('Flip', self.w);
+  Screen('Flip', self.w, 0, 0, 1);
 end
 
 function [flag, self] = end_timeout_error(self, params)
@@ -1906,7 +1903,7 @@ end
 function self = xstart_hold_error(self, params)
   % make the screen black
   Screen('FillRect', self.w, [0 0 0]);
-  Screen('Flip', self.w);
+  Screen('Flip', self.w, 0, 0, 1);
 end
 
 function [flag, self] = end_hold_error(self, params)
@@ -1916,7 +1913,7 @@ end
 function self = xstart_drag_error(self, params)
   % make the screen black
   Screen('FillRect', self.w, [0 0 0]);
-  Screen('Flip', self.w);
+  Screen('Flip', self.w, 0, 0, 1);
 end
 
 function [flag, self] = end_drag_error(self, params)
@@ -1926,7 +1923,8 @@ end
 %% BASIC DRAWING SHORTCUTS
 function draw_pd_and_exit_targs(self, params)
   % Draw the exit and PD targets
-  Screen('FillOval', self.w, self.exitColor, self.exitRect, self.exitDiameter);
+%   Screen('FillOval', self.w, self.exitColor, self.exitRect, self.exitDiameter);
+  Screen('FrameOval', self.w, self.exitColor, self.exitRect, 2);
   Screen('FillOval', self.w, self.pdColor, self.pdRect, self.pdDiameter);
 end
 
@@ -1975,11 +1973,13 @@ end
 
 %% REWARD DISPENSING
 function write_juice_reward(self, params, rew_time)
-  volume2dispense = rew_time*50/60; % mL/min x 1 min/60 sec --> sec x mL/sec
-  rew_str = sprintf(["VOL %0.1f"], volume2dispense);
-  writeline(self.rewardPort, rew_str);
-  WaitSecs(0.05);
-  writeline(self.rewardPort, "RUN");
+  if self.is_rewardPort
+    volume2dispense = rew_time*50/60; % mL/min x 1 min/60 sec --> sec x mL/sec
+    rew_str = sprintf(["VOL %0.1f"], volume2dispense);
+    writeline(self.rewardPort, rew_str);
+    WaitSecs(0.05);
+    writeline(self.rewardPort, "RUN");
+  end
 end
 
 
