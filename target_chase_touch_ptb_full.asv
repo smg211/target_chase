@@ -70,6 +70,7 @@ else
   info = GetTouchDeviceInfo(self.dev);
   disp(info);
 end
+input_mode = 'mouse';
 
 % Define black and white
 white = WhiteIndex(screenId);
@@ -82,10 +83,6 @@ self.baseSize = RectWidth(rect) / 20;
 % Query the frame duration
 % ifi = Screen('GetFlipInterval', self.w);
 ifi = 1/120;
-
-% Sync us and get a time stamp
-Screen('Flip', self.w);
-waitframes = 1;
 
 % Maximum priority level
 topPriorityLevel = MaxPriority(self.w);
@@ -502,8 +499,15 @@ end
 
 % DIO
 try
-  self.dioPort = serialport('COM7', 115200);
-  configureTerminator(self.dioPort,"CR/LF");
+  lineTerminator = 10;
+  baudRate = 115200;
+  portSpec = 'COM6';
+
+  portSettings = sprintf('%s BaudRate=%i Terminator=%i', specialSettings, baudRate, lineTerminator);
+  self.dioPort = IOPort('OpenSerialPort', portSpec, portSettings);
+
+%   self.dioPort = serialport('COM6', 115200);
+%   configureTerminator(self.dioPort,"CR/LF");
 
   self.is_dioPort = true;
 catch
@@ -512,11 +516,19 @@ end
 
 % Camera Triggers
 try
-  self.camtrigPort = serialport('COM8', 9600);
-  configureTerminator(self.camtrigPort,"CR/LF");
+  lineTerminator = 10;
+  baudRate = 9600;
+  portSpec = 'COM8';
+
+  portSettings = sprintf('%s BaudRate=%i Terminator=%i', specialSettings, baudRate, lineTerminator);
+  self.camtrigPort = IOPort('OpenSerialPort', portSpec, portSettings);
+
+%   self.camtrigPort = serialport('COM8', 9600);
+%   configureTerminator(self.camtrigPort,"CR/LF");
   
   % say hello
-  writeline(self.camtrigPort, 'a');
+  IOPort('Write', self.camtrigPort, 'a', 0);
+%   writeline(self.camtrigPort, 'a');
 
   self.is_camtrigPort = true;
 catch
@@ -525,23 +537,32 @@ end
 
 % Eyetracker Triggers
 try
-  self.iscanPort = serialport('COM6', 115200);
-  configureTerminator(self.iscanPort,"CR/LF");
+  lineTerminator = 10;
+  baudRate = 9600;
+  portSpec = 'COM6';
+
+  portSettings = sprintf('%s BaudRate=%i Terminator=%i', specialSettings, baudRate, lineTerminator);
+  self.iscanPort = IOPort('OpenSerialPort', portSpec, portSettings);
+
+%   self.iscanPort = serialport('COM6', 115200);
+%   configureTerminator(self.iscanPort,"CR/LF");
 
   % send start recording trigger
-  writeline(self.iscanPort, 's');
+  IOPort('Write', self.iscanPort, 's', 0);
+%   writeline(self.iscanPort, 's');
 
   self.is_iscanPort = true;
 catch
   self.is_iscanPort = false;
 end
 
-% External Button
+% Button
 try
-  self.buttonPort = serialport('COM10', 9600);
-  self.buttonPort.Timeout = 0.05;
-  configureTerminator(self.buttonPort,"CR/LF");
-  
+  self.buttonPort = serialport("COM10", 115200);
+  configureTerminator(self.buttonPort, 'CR/LF');
+  flush(self.buttonPort);
+  readline(self.buttonPort);
+
   self.is_buttonPort = true;
 catch
   self.is_buttonPort = false;
@@ -902,6 +923,10 @@ self.active_target_position = [nan nan];
 self.t_next_collect = GetSecs + data_collection_interval;
 data_ix = 0;
 
+if self.is_buttonPort
+  flush(self.buttonPort);
+end
+
 %% START THE GAME
 if ~hit_escape
   try
@@ -930,6 +955,7 @@ if ~hit_escape
         if buttons(1)
           self.curs_active(1).x = x;
           self.curs_active(1).y = y;
+          self.curs_active(1).id = 1;
           self.curs_active(1).type = 2; 
         else
           self.curs_active = [];
@@ -960,7 +986,8 @@ if ~hit_escape
         if self.is_dioPort
           % FIXME: need to figure out how to send data_ix information
   %         writeline(self.dioPort, ['d' num2str(rem(data_ix, 256))]);
-          writeline(self.dioPort, 'd');
+          IOPort('Write', self.dioPort, 'd', 0);
+%           writeline(self.dioPort, 'd');
         end
       end
   
@@ -985,7 +1012,7 @@ if ~hit_escape
     raw.cursor = pix2cm_batch(raw.cursor, self.res);
     raw.target_pos = pix2cm_batch(raw.target_pos, self.res);
     save([filename '.mat'], 'raw', '-v7.3');
-  
+    
     TouchQueueRelease(self.dev);
     RestrictKeysForKbCheck([]);
     sca;
@@ -995,17 +1022,19 @@ if ~hit_escape
   %% STOP THE ISCAN, KINEMATIC CAMERAS, AND AUDIO
   % Stop playback: Stop immediately, but wait for stop to happen:
   if self.is_audioPort
-      PsychPortAudio('Stop', self.pahandle, 0, 1);
+    PsychPortAudio('Stop', self.pahandle, 0, 1);
   end
-  
+
   % Stop kinematic cameras
   if self.is_camtrigPort
-    writeline(self.camtrigPort, '0');
+    IOPort('Write', self.camtrigPort, '0', 0);
+%     writeline(self.camtrigPort, '0');
   end
-  
+
   % Stop ISCAN recording
   if self.is_iscanPort
-    writeline(self.iscanPort, 'e');
+    IOPort('Write', self.iscanPort, 'e', 0);
+%     writeline(self.iscanPort, 'e');
   end
   
   %% DISPLAY THE SESSION SUMMARY SCREEN AND SAVE THE DATA
@@ -1121,6 +1150,7 @@ else
   sca;
 end
 
+close
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%% SUBFUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -1468,7 +1498,8 @@ end
 function self = xstart_ITI(self, params)
   % stop camera triggers
   if self.is_camtrigPort
-    writeline(self.camtrigPort, '0');
+    IOPort('Write', self.camtrigPort, '0', 0);
+%     writeline(self.camtrigPort, '0');
   end
   
   % Make the photodiode intermediate color
@@ -1504,9 +1535,6 @@ function self = xstart_taskbreak(self, params)
       self.this_breakdur = 0;
     end
   end
-  
-  % don't clear the framebuffer
-  self.dontclear = 1;
 
   % do some stuff that is really just prep for each trial and not related
   % to breaks
@@ -1572,11 +1600,9 @@ function self = xstart_vid_trig(self, params)
 
   % write '1' to camera arduino to start taking pics at 50hz
   if self.is_camtrigPort
-    writeline(self.camtrigPort, '1');
+    IOPort('Write', self.camtrigPort, '1', 0);
+%     writeline(self.camtrigPort, '1');
   end
-
-  % don't clear the framebuffer
-  self.dontclear = 1;
 end
 
 function [flag, self] = end_vid_trig(self, params)
@@ -1601,7 +1627,8 @@ function [flag, self] = button_pressed(self, params)
   if ~self.use_button || ~self.is_buttonPort
     flag = true;
   else
-    % get the button values
+    % flush the button port and then read the most recent value
+    flush(self.buttonPort);
     button_data = readline(self.buttonPort);
 
     % determine if the values indicate a button press or not
@@ -1629,7 +1656,7 @@ function self = xstart_button_hold(self, params)
   draw_pd_and_exit_targs(self, params);
 
   % Flip to the screen
-  Screen('Flip', self.w, 0);
+  Screen('Flip', self.w, 0, 0, 1);
 end
 
 function [flag, self] = finish_button_hold(self, params)
@@ -1703,7 +1730,7 @@ function self = xstart_target(self, params)
     draw_pd_and_exit_targs(self, params);
   
     % Flip to the screen
-    Screen('Flip', self.w, 0);
+    Screen('Flip', self.w, 0, 0, 1);
 
     self.this_targ_drawn = true;
 
@@ -1739,7 +1766,7 @@ function self = xwhile_target(self, params)
         draw_pd_and_exit_targs(self, params);
 
         % Flip to the screen
-        Screen('Flip', self.w, 0);
+        Screen('Flip', self.w, 0, 0, 1);
 
         self.this_targ_drawn = true;
       end
@@ -1814,7 +1841,7 @@ function self = xstart_targ_hold(self, params)
     draw_pd_and_exit_targs(self, params);
 
     % Flip to the screen
-    Screen('Flip', self.w, 0);
+    Screen('Flip', self.w, 0, 0, 1);
   end
 end
 
@@ -1871,7 +1898,7 @@ function self = xstart_reward(self, params)
   % make the screen white and draw the photodiode
   Screen('FillRect', self.w, [1 1 1]);
   Screen('FillOval', self.w, self.pdColor, self.pdRect, self.pdDiameter);
-  Screen('Flip', self.w);
+  Screen('Flip', self.w, 0, 0, 1);
 
   % play the correct trial reward sound
   self = playsound(self, 1);
@@ -1897,7 +1924,7 @@ end
 function self = xstart_timeout_error(self, params)
   % make the screen black
   Screen('FillRect', self.w, [0 0 0]);
-  Screen('Flip', self.w);
+  Screen('Flip', self.w, 0, 0, 1);
 end
 
 function [flag, self] = end_timeout_error(self, params)
@@ -1907,7 +1934,7 @@ end
 function self = xstart_hold_error(self, params)
   % make the screen black
   Screen('FillRect', self.w, [0 0 0]);
-  Screen('Flip', self.w);
+  Screen('Flip', self.w, 0, 0, 1);
 end
 
 function [flag, self] = end_hold_error(self, params)
@@ -1917,7 +1944,7 @@ end
 function self = xstart_drag_error(self, params)
   % make the screen black
   Screen('FillRect', self.w, [0 0 0]);
-  Screen('Flip', self.w);
+  Screen('Flip', self.w, 0, 0, 1);
 end
 
 function [flag, self] = end_drag_error(self, params)
@@ -1986,8 +2013,21 @@ function write_juice_reward(self, params, rew_time)
   end
 end
 
-
-
-
+%% CLOSE SERIAL PORTS
+function close_serial_ports(self, params)
+  if self.is_dioPort
+    fprintf('CLOSING DIO SERIAL PORT\n');
+    IOPort('Close', self.dioPort);
+  end
+  if self.is_camtrigPort
+    fprintf('CLOSING CAMTRIG SERIAL PORT\n');
+    IOPort('Close', self.camtrigPort);
+  end
+  if self.is_iscanPort
+    fprintf('CLOSING ISCAN SERIAL PORT\n');
+    IOPort('Close', self.iscanPort);
+  end
+  fprintf('DONE.\n');
+end
 
 

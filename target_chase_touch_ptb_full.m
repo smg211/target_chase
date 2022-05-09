@@ -19,6 +19,110 @@ nudge_right_edge_in_by_mm = 30;
 self = [];
 self.t_start = GetSecs;
 
+%% SETUP THE SERIAL COMMUNICATION PORTS
+IOPort('CloseAll');
+
+% Juicer
+try
+  if strcmp(params.juicer, 'yellow')
+    if strcmp(params.user_id, 'Ganguly')
+      self.rewardPort = serialport('COM4', 115200);
+    elseif strcmp(params.user_id, 'BasalGangulia')
+      self.rewardPort = serialport('COM3', 115200);
+    end
+  elseif strcmp(params.juicer, 'red')
+    portinfo = getSCPInfo;
+    for c = 1:length(portinfo)
+      if any(strfind(portinfo(c).description, 'Prolific USB-to-Serial'))
+        prolific_com = portinfo(c).device;
+        break
+      end
+    end
+    self.rewardPort = serialport(prolific_com, 19200);
+    configureTerminator(self.rewardPort, "CR");
+
+    % Setup the flow rate
+    writeline(self.rewardPort, 'VOL 0.5');
+    writeline(self.rewardPort, 'VOL ML');
+    writeline(self.rewardPort, 'RAT 50MM');
+  end
+
+  self.is_rewardPort = true;
+catch
+  self.is_rewardPort = false;
+end
+
+% DIO
+try
+  lineTerminator = 10;
+  baudRate = 115200;
+  portSpec = 'COM7';
+
+  portSettings = sprintf('BaudRate=%i Terminator=%i', baudRate, lineTerminator);
+  self.dioPort = IOPort('OpenSerialPort', portSpec, portSettings);
+
+%   self.dioPort = serialport('COM7', 115200);
+%   configureTerminator(self.dioPort,"CR/LF");
+
+  self.is_dioPort = true;
+catch
+  self.is_dioPort = false;
+end
+
+% Camera Triggers
+try
+  lineTerminator = 10;
+  baudRate = 9600;
+  portSpec = 'COM8'; % COM 8
+
+  portSettings = sprintf('BaudRate=%i Terminator=%i', baudRate, lineTerminator);
+  self.camtrigPort = IOPort('OpenSerialPort', portSpec, portSettings);
+
+%   self.camtrigPort = serialport('COM8', 9600);
+%   configureTerminator(self.camtrigPort,"CR/LF");
+  
+  % say hello
+  IOPort('Write', self.camtrigPort, 'a', 0);
+%   writeline(self.camtrigPort, 'a');
+
+  self.is_camtrigPort = true;
+catch
+  self.is_camtrigPort = false;
+end
+
+% Eyetracker Triggers
+try
+  lineTerminator = 10;
+  baudRate = 9600;
+  portSpec = 'COM6'; % COM 6
+
+  portSettings = sprintf('BaudRate=%i Terminator=%i', baudRate, lineTerminator);
+  self.iscanPort = IOPort('OpenSerialPort', portSpec, portSettings);
+
+%   self.iscanPort = serialport('COM6', 115200);
+%   configureTerminator(self.iscanPort,"CR/LF");
+
+  % send start recording trigger
+  IOPort('Write', self.iscanPort, 's', 0);
+%   writeline(self.iscanPort, 's');
+
+  self.is_iscanPort = true;
+catch
+  self.is_iscanPort = false;
+end
+
+% Button
+try
+  self.buttonPort = serialport("COM10", 115200);
+  configureTerminator(self.buttonPort, 'CR/LF');
+  flush(self.buttonPort);
+  readline(self.buttonPort);
+
+  self.is_buttonPort = true;
+catch
+  self.is_buttonPort = false;
+end
+
 %% GET SYSTEM AND DISPLAY INFORMATION
 % system, user, and path saving
 cwd = pwd;
@@ -70,6 +174,7 @@ else
   info = GetTouchDeviceInfo(self.dev);
   disp(info);
 end
+input_mode = 'mouse';
 
 % Define black and white
 white = WhiteIndex(screenId);
@@ -465,84 +570,6 @@ params.time_thresh_for_max_rew = ...
 params.time_thresh_for_min_rew = ...
   targ1on2touch_fast+targon2touch_slow*(self.num_targets-1)+params.intertarg_delay*(self.num_targets-1);
 
-%% SETUP THE SERIAL COMMUNICATION PORTS
-% Juicer
-try
-  if strcmp(params.juicer, 'yellow')
-    if strcmp(params.user_id, 'Ganguly')
-      self.rewardPort = serialport('COM4', 115200);
-    elseif strcmp(params.user_id, 'BasalGangulia')
-      self.rewardPort = serialport('COM3', 115200);
-    end
-  elseif strcmp(params.juicer, 'red')
-    portinfo = getSCPInfo;
-    for c = 1:length(portinfo)
-      if any(strfind(portinfo(c).description, 'Prolific USB-to-Serial'))
-        prolific_com = portinfo(c).device;
-        break
-      end
-    end
-    self.rewardPort = serialport(prolific_com, 19200);
-    configureTerminator(self.rewardPort, "CR");
-
-    % Setup the flow rate
-    writeline(self.rewardPort, 'VOL 0.5');
-    writeline(self.rewardPort, 'VOL ML');
-    writeline(self.rewardPort, 'RAT 50MM');
-  end
-
-  self.is_rewardPort = true;
-catch
-  self.is_rewardPort = false;
-end
-
-% DIO
-try
-  self.dioPort = serialport('COM7', 115200);
-  configureTerminator(self.dioPort,"CR/LF");
-
-  self.is_dioPort = true;
-catch
-  self.is_dioPort = false;
-end
-
-% Camera Triggers
-try
-  self.camtrigPort = serialport('COM8', 9600);
-  configureTerminator(self.camtrigPort,"CR/LF");
-  
-  % say hello
-  writeline(self.camtrigPort, 'a');
-
-  self.is_camtrigPort = true;
-catch
-  self.is_camtrigPort = false;
-end
-
-% Eyetracker Triggers
-try
-  self.iscanPort = serialport('COM6', 115200);
-  configureTerminator(self.iscanPort,"CR/LF");
-
-  % send start recording trigger
-  writeline(self.iscanPort, 's');
-
-  self.is_iscanPort = true;
-catch
-  self.is_iscanPort = false;
-end
-
-% External Button
-try
-  self.buttonPort = serialport('COM10', 9600);
-  self.buttonPort.Timeout = 0.05;
-  configureTerminator(self.buttonPort,"CR/LF");
-  
-  self.is_buttonPort = true;
-catch
-  self.is_buttonPort = false;
-end
-
 %% PREPARE OBJECTS TO BE DISPLAYED
 % determine the number of pixels for the effective target radius
 self.effective_target_rad_px = cm2pix(params.effective_target_rad, self.res);
@@ -898,6 +925,10 @@ self.active_target_position = [nan nan];
 self.t_next_collect = GetSecs + data_collection_interval;
 data_ix = 0;
 
+if self.is_buttonPort
+  flush(self.buttonPort);
+end
+
 %% START THE GAME
 if ~hit_escape
   try
@@ -926,6 +957,7 @@ if ~hit_escape
         if buttons(1)
           self.curs_active(1).x = x;
           self.curs_active(1).y = y;
+          self.curs_active(1).id = 1;
           self.curs_active(1).type = 2; 
         else
           self.curs_active = [];
@@ -956,7 +988,8 @@ if ~hit_escape
         if self.is_dioPort
           % FIXME: need to figure out how to send data_ix information
   %         writeline(self.dioPort, ['d' num2str(rem(data_ix, 256))]);
-          writeline(self.dioPort, 'd');
+          IOPort('Write', self.dioPort, 'd', 0);
+%           writeline(self.dioPort, 'd');
         end
       end
   
@@ -981,7 +1014,7 @@ if ~hit_escape
     raw.cursor = pix2cm_batch(raw.cursor, self.res);
     raw.target_pos = pix2cm_batch(raw.target_pos, self.res);
     save([filename '.mat'], 'raw', '-v7.3');
-  
+    
     TouchQueueRelease(self.dev);
     RestrictKeysForKbCheck([]);
     sca;
@@ -991,17 +1024,19 @@ if ~hit_escape
   %% STOP THE ISCAN, KINEMATIC CAMERAS, AND AUDIO
   % Stop playback: Stop immediately, but wait for stop to happen:
   if self.is_audioPort
-      PsychPortAudio('Stop', self.pahandle, 0, 1);
+    PsychPortAudio('Stop', self.pahandle, 0, 1);
   end
-  
+
   % Stop kinematic cameras
   if self.is_camtrigPort
-    writeline(self.camtrigPort, '0');
+    IOPort('Write', self.camtrigPort, '0', 0);
+%     writeline(self.camtrigPort, '0');
   end
-  
+
   % Stop ISCAN recording
   if self.is_iscanPort
-    writeline(self.iscanPort, 'e');
+    IOPort('Write', self.iscanPort, 'e', 0);
+%     writeline(self.iscanPort, 'e');
   end
   
   %% DISPLAY THE SESSION SUMMARY SCREEN AND SAVE THE DATA
@@ -1117,6 +1152,7 @@ else
   sca;
 end
 
+close_serial_ports(self, params);
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%% SUBFUNCTIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -1464,7 +1500,8 @@ end
 function self = xstart_ITI(self, params)
   % stop camera triggers
   if self.is_camtrigPort
-    writeline(self.camtrigPort, '0');
+    IOPort('Write', self.camtrigPort, '0', 0);
+%     writeline(self.camtrigPort, '0');
   end
   
   % Make the photodiode intermediate color
@@ -1500,9 +1537,6 @@ function self = xstart_taskbreak(self, params)
       self.this_breakdur = 0;
     end
   end
-  
-  % don't clear the framebuffer
-  self.dontclear = 1;
 
   % do some stuff that is really just prep for each trial and not related
   % to breaks
@@ -1568,11 +1602,9 @@ function self = xstart_vid_trig(self, params)
 
   % write '1' to camera arduino to start taking pics at 50hz
   if self.is_camtrigPort
-    writeline(self.camtrigPort, '1');
+    IOPort('Write', self.camtrigPort, '1', 0);
+%     writeline(self.camtrigPort, '1');
   end
-
-  % don't clear the framebuffer
-  self.dontclear = 1;
 end
 
 function [flag, self] = end_vid_trig(self, params)
@@ -1597,7 +1629,8 @@ function [flag, self] = button_pressed(self, params)
   if ~self.use_button || ~self.is_buttonPort
     flag = true;
   else
-    % get the button values
+    % flush the button port and then read the most recent value
+    flush(self.buttonPort);
     button_data = readline(self.buttonPort);
 
     % determine if the values indicate a button press or not
@@ -1982,8 +2015,10 @@ function write_juice_reward(self, params, rew_time)
   end
 end
 
-
-
-
+%% CLOSE SERIAL PORTS
+function close_serial_ports(self, params)
+  IOPort('CloseAll');
+  fprintf('DONE.\n');
+end
 
 
