@@ -22,36 +22,6 @@ self.t_start = GetSecs;
 %% SETUP THE SERIAL COMMUNICATION PORTS
 IOPort('CloseAll');
 
-% Juicer
-try
-  if strcmp(params.juicer, 'yellow')
-    if strcmp(params.user_id, 'Ganguly')
-      self.rewardPort = serialport('COM4', 115200);
-    elseif strcmp(params.user_id, 'BasalGangulia')
-      self.rewardPort = serialport('COM3', 115200);
-    end
-  elseif strcmp(params.juicer, 'red')
-    portinfo = getSCPInfo;
-    for c = 1:length(portinfo)
-      if any(strfind(portinfo(c).description, 'Prolific USB-to-Serial'))
-        prolific_com = portinfo(c).device;
-        break
-      end
-    end
-    self.rewardPort = serialport(prolific_com, 19200);
-    configureTerminator(self.rewardPort, "CR");
-
-    % Setup the flow rate
-    writeline(self.rewardPort, 'VOL 0.5');
-    writeline(self.rewardPort, 'VOL ML');
-    writeline(self.rewardPort, 'RAT 50MM');
-  end
-
-  self.is_rewardPort = true;
-catch
-  self.is_rewardPort = false;
-end
-
 % DIO
 try
   lineTerminator = 10;
@@ -103,6 +73,7 @@ try
 %   configureTerminator(self.iscanPort,"CR/LF");
 
   % send start recording trigger
+  IOPort('Write', self.iscanPort, 'e', 0);
   IOPort('Write', self.iscanPort, 's', 0);
 %   writeline(self.iscanPort, 's');
 
@@ -113,7 +84,7 @@ end
 
 % Button
 try
-  self.buttonPort = serialport("COM10", 115200);
+  self.buttonPort = serialport("COM15", 9600);
   configureTerminator(self.buttonPort, 'CR/LF');
   flush(self.buttonPort);
   readline(self.buttonPort);
@@ -174,7 +145,6 @@ else
   info = GetTouchDeviceInfo(self.dev);
   disp(info);
 end
-input_mode = 'mouse';
 
 % Define black and white
 white = WhiteIndex(screenId);
@@ -632,8 +602,8 @@ self.trlcnt_position_px = cm2pix(trlcnt_position_cm, self.res);
 % params.save_interval = params.break_dur;
 
 % how frequently to sample the data for storing
-params.data_collection_freq = 10000; %120;
-data_collection_interval = 1/params.data_collection_freq;
+params.update_freq = 200; %120;
+update_interval = 1/params.update_freq;
 
 % determine name of file
 filename = [data_path lower(params.animal_name) '_' params.start_time];
@@ -785,6 +755,36 @@ catch
   psychrethrow(psychlasterror);
 end
 
+%% SETUP JUICER
+try
+  if strcmp(params.juicer, 'yellow')
+    if strcmp(params.user_id, 'Ganguly')
+      self.rewardPort = serialport('COM4', 115200);
+    elseif strcmp(params.user_id, 'BasalGangulia')
+      self.rewardPort = serialport('COM3', 115200);
+    end
+  elseif strcmp(params.juicer, 'red')
+    portinfo = getSCPInfo;
+    for c = 1:length(portinfo)
+      if any(strfind(portinfo(c).description, 'Prolific USB-to-Serial'))
+        prolific_com = portinfo(c).device;
+        break
+      end
+    end
+    self.rewardPort = serialport(prolific_com, 19200);
+    configureTerminator(self.rewardPort, "CR");
+
+    % Setup the flow rate
+    writeline(self.rewardPort, 'VOL 0.5');
+    writeline(self.rewardPort, 'VOL ML');
+    writeline(self.rewardPort, 'RAT 50MM');
+  end
+
+  self.is_rewardPort = true;
+catch
+  self.is_rewardPort = false;
+end
+
 %% ADVANCE TO THE START SCREEN
 % Display all of the port checks
 check_title = {'Juicer Connected: ', 'Button Connected: ', 'DIO Port Connected: ', ...
@@ -921,8 +921,7 @@ self.state_start = GetSecs;
 self.ITI = 0;
 self.trials_started = 0;
 self.active_target_position = [nan nan];
-% self.t_next_save = GetSecs + params.save_interval;
-self.t_next_collect = GetSecs + data_collection_interval;
+self.t_next_update = GetSecs + update_interval;
 data_ix = 0;
 
 if self.is_buttonPort
@@ -946,33 +945,32 @@ if ~hit_escape
     % Loop the animation until the escape key is pressed or the exit buttons
     % are pressed
     while ~strcmp(self.state, 'end_game')
-      if strcmp(params.input_mode, 'touch')
-        self = process_touch_events(self);
-  
-      elseif strcmp(params.input_mode, 'mouse')
-        % Get the position of the mouse
-        [x, y, buttons] = GetMouse(screenId);
-      
-        % if there is a click, see if it happens in the target area
-        if buttons(1)
-          self.curs_active(1).x = x;
-          self.curs_active(1).y = y;
-          self.curs_active(1).id = 1;
-          self.curs_active(1).type = 2; 
-        else
-          self.curs_active = [];
+      if GetSecs > self.t_next_update
+        self.t_next_update = self.t_next_update + update_interval;
+        if strcmp(params.input_mode, 'touch')
+          self = process_touch_events(self);
+    
+        elseif strcmp(params.input_mode, 'mouse')
+          % Get the position of the mouse
+          [x, y, buttons] = GetMouse(screenId);
+        
+          % if there is a click, see if it happens in the target area
+          if buttons(1)
+            self.curs_active(1).x = x;
+            self.curs_active(1).y = y;
+            self.curs_active(1).id = 1;
+            self.curs_active(1).type = 2; 
+          else
+            self.curs_active = [];
+          end
         end
-      end
-      
-      % Run the update function
-      self = update(self, params);
-  
-      % collect the data
-      if GetSecs > self.t_next_collect
-        self.t_next_collect = GetSecs + data_collection_interval;
-  
+        
+        % Run the update function
+        self = update(self, params);
+    
+        % collect the data
         data_ix = data_ix+1;
-  
+
         data.state{data_ix} = self.state;
         if isempty(self.curs_active)
           data.cursor(:, :, data_ix) = nan(2, 10);
@@ -983,15 +981,15 @@ if ~hit_escape
         end
         data.target_pos(:, data_ix) = self.active_target_position';
         data.time(data_ix) = GetSecs - self.t_start;
-  
+
         % Send DIO trigger
         if self.is_dioPort
           % FIXME: need to figure out how to send data_ix information
-  %         writeline(self.dioPort, ['d' num2str(rem(data_ix, 256))]);
-          IOPort('Write', self.dioPort, 'd', 0);
-%           writeline(self.dioPort, 'd');
+          %         writeline(self.dioPort, ['d' num2str(rem(data_ix, 256))]);
+          IOPort('Write', self.dioPort, ['d', lower(dec2hex(rem(data_ix, 10)))], 0);
+%           IOPort('Write', self.dioPort, num2str(rem(data_ix, 256)), 0);
+          %           writeline(self.dioPort, 'd');
         end
-      end
   
   %     if strcmp(self.state, params.save_state) && ...
   %         self.state_length > params.t_state_save && ...
@@ -1003,6 +1001,7 @@ if ~hit_escape
   % 
   %       self.t_next_save = GetSecs + params.save_interval;
   %     end
+      end
     end
     
     if strcmp(params.input_mode, 'touch')

@@ -15,7 +15,7 @@ param_info(2).opts_title = {'Old Yellow', 'New Red'};
 param_info(2).opts_varname = {'yellow', 'red'};
 param_info(2).default_opt = {'red'};
 param_info(2).require_selection = true;
-param_info(2).is_hidden = true;
+param_info(2).is_hidden = false;
 
 param_info(3).title = 'Button Type';
 param_info(3).varname = 'button_version';
@@ -293,7 +293,7 @@ cwd = pwd;
 if ispc
   if any(strfind(cwd, 'sando'))
     user = 'sando';
-    tcpath = 'C:\Users\sando\Dropbox\Ganguly_Lab\Code\touchscreen-co\Touchscreen\target_chase_v2\';
+    tcpath = 'C:\Users\sando\Documents\target_chase\';
   end
 end
 save([tcpath 'param_screen.mat'], 'param_info', '-v7.3')
