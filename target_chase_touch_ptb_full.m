@@ -367,6 +367,9 @@ params.input_mode = input_mode;
 params.exit_hold = 2;
 params.reward_dur = 0.75;
 params.outlineWidth = 4;
+params.rew_scale_method = 'adaptive';
+params.max_rew_pthresh = 0.75;
+params.min_rew_pthresh = 0.25;
 
 %% PROCESS ALL PARAMETERS FOR THE TASK
 % set all of the unentered parameters to their default values
@@ -426,6 +429,30 @@ end
 
 % add the constant bottom screen raise to the one specified in the settings
 params.effective_screen_bot = params.screen_bot + raise_botton_edge_by_mm/10;
+
+% thresholds for max/min rewards
+if strcmp(params.rew_scale_method, 'absolute')
+  if strcmp(params.animal_name, 'butters')
+    targ1on2touch_fast = 0.9;
+    targon2touch_fast = 0.5;
+    targon2touch_slow = 0.6;
+  elseif strcmp(params.animal_name, 'fifi')
+    targ1on2touch_fast = 0.65;
+    targon2touch_fast = 0.45;
+    targon2touch_slow = 0.55;
+  else 
+    targ1on2touch_fast = 0.7;
+    targon2touch_fast = 0.45;
+    targon2touch_slow = 0.6;
+  end
+  params.time_thresh_for_max_rew = ...
+    targ1on2touch_fast+targon2touch_fast*(self.num_targets-1)+params.intertarg_delay*(self.num_targets-1);
+  params.time_thresh_for_min_rew = ...
+    targ1on2touch_fast+targon2touch_slow*(self.num_targets-1)+params.intertarg_delay*(self.num_targets-1);
+elseif strcmp(params.rew_scale_method, 'adaptive')
+  params.time_thresh_for_max_rew = Inf;
+  params.time_thresh_for_min_rew = -Inf;
+end
 
 %% GET TARGET POSITIONS
 
@@ -521,24 +548,6 @@ self.target_radius_px = cm2pix(params.target_rad, self.res);
 
 self.num_targets = length(~isnan(self.target_positions_cm(:, 1)));
 
-%% determine time thresholds for reward amounts
-if strcmp(params.animal_name, 'butters')
-  targ1on2touch_fast = 0.9;
-  targon2touch_fast = 0.5;
-  targon2touch_slow = 0.6;
-elseif strcmp(params.animal_name, 'fifi')
-  targ1on2touch_fast = 0.65;
-  targon2touch_fast = 0.45;
-  targon2touch_slow = 0.55;
-else 
-  targ1on2touch_fast = 0.7;
-  targon2touch_fast = 0.45;
-  targon2touch_slow = 0.6;
-end
-params.time_thresh_for_max_rew = ...
-  targ1on2touch_fast+targon2touch_fast*(self.num_targets-1)+params.intertarg_delay*(self.num_targets-1);
-params.time_thresh_for_min_rew = ...
-  targ1on2touch_fast+targon2touch_slow*(self.num_targets-1)+params.intertarg_delay*(self.num_targets-1);
 
 %% PREPARE OBJECTS TO BE DISPLAYED
 % determine the number of pixels for the effective target radius
@@ -592,7 +601,7 @@ for ix = 1:length(x_cm)
 end
 
 % trial counter location (opposite of photodiode)
-trlcnt_position_cm = [width_mm/20 - 1.8, height_mm/20 - 0.5];
+trlcnt_position_cm = [width_mm/20 - nudge_right_edge_in_by_mm/10 - 1.5, (-height_mm/20 + raise_botton_edge_by_mm/10 + 1.5)];
 self.trlcnt_position_px = cm2pix(trlcnt_position_cm, self.res);
 
 %% DATA SAVING
@@ -602,7 +611,7 @@ self.trlcnt_position_px = cm2pix(trlcnt_position_cm, self.res);
 % params.save_interval = params.break_dur;
 
 % how frequently to sample the data for storing
-params.update_freq = 200; %120;
+params.update_freq = 100; %120;
 update_interval = 1/params.update_freq;
 
 % determine name of file
@@ -771,13 +780,24 @@ try
         break
       end
     end
-    self.rewardPort = serialport(prolific_com, 19200);
-    configureTerminator(self.rewardPort, "CR");
+    
+    lineTerminator = 13;
+    baudRate = 19200;
+    portSpec = prolific_com;
+    
+    portSettings = sprintf('BaudRate=%i Terminator=%i', baudRate, lineTerminator);
+    self.rewardPort = IOPort('OpenSerialPort', portSpec, portSettings);
+    
+%     self.rewardPort = serialport(prolific_com, 19200);
+%     configureTerminator(self.rewardPort, "CR");
 
     % Setup the flow rate
-    writeline(self.rewardPort, 'VOL 0.5');
-    writeline(self.rewardPort, 'VOL ML');
-    writeline(self.rewardPort, 'RAT 50MM');
+    IOPort('Write', self.rewardPort, 'VOL 0.5', 0);
+    IOPort('Write', self.rewardPort, 'VOL ML', 0);
+    IOPort('Write', self.rewardPort, 'RAT 50MM', 0);
+%     writeline(self.rewardPort, 'VOL 0.5');
+%     writeline(self.rewardPort, 'VOL ML');
+%     writeline(self.rewardPort, 'RAT 50MM');
   end
 
   self.is_rewardPort = true;
@@ -922,7 +942,10 @@ self.ITI = 0;
 self.trials_started = 0;
 self.active_target_position = [nan nan];
 self.t_next_update = GetSecs + update_interval;
-data_ix = 0;
+self.data_ix = 0;
+self.seq_completion_time = [];
+
+data = [];
 
 if self.is_buttonPort
   flush(self.buttonPort);
@@ -946,7 +969,7 @@ if ~hit_escape
     % are pressed
     while ~strcmp(self.state, 'end_game')
       if GetSecs > self.t_next_update
-        self.t_next_update = self.t_next_update + update_interval;
+        self.t_next_update = GetSecs + update_interval;
         if strcmp(params.input_mode, 'touch')
           self = process_touch_events(self);
     
@@ -966,41 +989,10 @@ if ~hit_escape
         end
         
         % Run the update function
-        self = update(self, params);
-    
+        [self, data] = update(self, params, data);
+        
         % collect the data
-        data_ix = data_ix+1;
-
-        data.state{data_ix} = self.state;
-        if isempty(self.curs_active)
-          data.cursor(:, :, data_ix) = nan(2, 10);
-          data.cursor_ids(:, data_ix) = nan(10, 1);
-        else
-          data.cursor(:, :, data_ix) = [[[self.curs_active.x]; [self.curs_active.y]] nan(2, 10-length(self.curs_active))];
-          data.cursor_ids(:, data_ix) = [[self.curs_active.id]'; nan(10-length(self.curs_active), 1)];
-        end
-        data.target_pos(:, data_ix) = self.active_target_position';
-        data.time(data_ix) = GetSecs - self.t_start;
-
-        % Send DIO trigger
-        if self.is_dioPort
-          % FIXME: need to figure out how to send data_ix information
-          %         writeline(self.dioPort, ['d' num2str(rem(data_ix, 256))]);
-          IOPort('Write', self.dioPort, ['d', lower(dec2hex(rem(data_ix, 10)))], 0);
-%           IOPort('Write', self.dioPort, num2str(rem(data_ix, 256)), 0);
-          %           writeline(self.dioPort, 'd');
-        end
-  
-  %     if strcmp(self.state, params.save_state) && ...
-  %         self.state_length > params.t_state_save && ...
-  %         GetSecs > self.t_next_save
-  %       raw = data;
-  %       raw.cursor = pix2cm_batch(raw.cursor, self.res);
-  %       raw.target_pos = pix2cm_batch(raw.target_pos, self.res);
-  %       save([filename '.mat'], 'raw', '-v7.3');
-  % 
-  %       self.t_next_save = GetSecs + params.save_interval;
-  %     end
+        data = collect_data(self, data);
       end
     end
     
@@ -1427,7 +1419,7 @@ function wrapup_touch(self)
 end
 
 %% UPDATE FUNCTION
-function self = update(self, params)
+function [self, data] = update(self, params, data)
   funcs = fieldnames(self.FSM.(self.state));
   for f = 1:length(funcs)
     self.state_length = GetSecs - self.state_start;
@@ -1443,14 +1435,21 @@ function self = update(self, params)
       self.prev_state = self.state;
       self.state = self.FSM.(self.state).(funcs{f});
       self.state_start = GetSecs;
+      
+      % record the time at this point so that we know when this state
+      % started and we don't have to wait for the potentially lengthy start
+      % function before we get the time for this state
+      self.t_update = GetSecs - self.t_start;
 
       % run any _start functions
       if exist(['xstart_' self.state]) == 2
         self = eval(['xstart_' self.state '(self, params)']);
       end
-
+      
       break
     else
+      self.t_update = GetSecs - self.t_start;
+      
       % run any _while functions
       if exist(['xwhile_' self.state]) == 2
         self = eval(['xwhile_' self.state '(self, params)']);
@@ -1560,6 +1559,16 @@ function self = xstart_taskbreak(self, params)
   else
     self.bht = params.button_hold_time;
   end
+  
+  % Set the threshold for reward scaling
+  if strcmp(params.rew_scale_method, 'adaptive') && self.block_ix >= 2
+    params.time_thresh_for_max_rew = norminv(params.max_rew_pthresh, ...
+      mean(self.seq_completion_time), std(self.seq_completion_time));
+    params.time_thresh_for_min_rew = norminv(params.min_rew_pthresh, ...
+      mean(self.seq_completion_time), std(self.seq_completion_time));
+    
+    fprintf(['Maximum reward threshold is: ' num2str(params.time_thresh_for_max_rew) '\n']);
+  end
 
   % Get the position of random targets
   if isstr(params.seq) && contains(params.seq, {'randevery', 'center out', 'button out'})
@@ -1589,6 +1598,7 @@ end
 function [flag, self] = end_taskbreak(self, params)
   if self.this_breakdur > 0 && self.state_length > self.this_breakdur
     % play doorbell sound
+    self = playsound(self, 4);
   end
   flag = self.state_length > self.this_breakdur;
 end
@@ -1808,6 +1818,10 @@ function [flag, self] = touch_target_nohold(self, params)
     end
     
     if flag
+      if self.target_index == 1
+        self.t_target1_touch = GetSecs;
+      end
+      
       % advance the target index
       self.target_index = self.target_index + 1;
 
@@ -1849,6 +1863,10 @@ end
 function [flag, self] = finish_targ_hold(self, params)
   if self.target_index ~= self.num_targets
     if self.tht <= self.state_length
+      if self.target_index == 1
+        self.t_target1_touch = GetSecs;
+      end
+      
       % advance the target index
       self.target_index = self.target_index + 1;
 
@@ -1869,6 +1887,7 @@ function [flag, self] = finish_last_targ_hold(self, params)
     if self.tht <= self.state_length
       flag = true;
       self.trial_completion_time = GetSecs - self.t_target1_on;
+      self.seq_completion_time(end+1) = GetSecs - self.t_target1_touch;
     else
       flag = false;
     end
@@ -1905,11 +1924,19 @@ function self = xstart_reward(self, params)
   self = playsound(self, 1);
 
   % dispense the juice reward
-  if self.do_rewardScaling
-    if self.trial_completion_time < params.time_thresh_for_max_rew
-      rew_time = params.last_targ_reward;
-    else
-      rew_time = params.min_targ_reward;
+  if self.do_rewardScaling 
+    if strcmp(params.rew_scale_method, 'absolute')
+      if self.trial_completion_time < params.time_thresh_for_max_rew
+        rew_time = params.last_targ_reward;
+      else
+        rew_time = params.min_targ_reward;
+      end
+    elseif strcmp(params.rew_scale_method, 'adaptive')
+      if self.seq_completion_time(end) < params.time_thresh_for_max_rew
+        rew_time = params.last_targ_reward;
+      else
+        rew_time = params.min_targ_reward;
+      end
     end
   else
     rew_time = params.last_targ_reward;
@@ -2008,9 +2035,11 @@ function write_juice_reward(self, params, rew_time)
   if self.is_rewardPort
     volume2dispense = rew_time*50/60; % mL/min x 1 min/60 sec --> sec x mL/sec
     rew_str = sprintf(["VOL %0.1f"], volume2dispense);
-    writeline(self.rewardPort, rew_str);
+    IOPort('Write', self.rewardPort, rew_str, 0);
+%     writeline(self.rewardPort, rew_str);
     WaitSecs(0.05);
-    writeline(self.rewardPort, "RUN");
+    IOPort('Write', self.rewardPort, "RUN", 0);
+%     writeline(self.rewardPort, "RUN");
   end
 end
 
@@ -2018,6 +2047,32 @@ end
 function close_serial_ports(self, params)
   IOPort('CloseAll');
   fprintf('DONE.\n');
+end
+
+
+%% DATA COLLECTION
+function data = collect_data(self, data)
+  % collect the data
+  self.data_ix = self.data_ix+1;
+
+  data.state{self.data_ix} = self.state;
+  if isempty(self.curs_active)
+    data.cursor(:, :, self.data_ix) = nan(2, 10);
+    data.cursor_ids(:, self.data_ix) = nan(10, 1);
+  else
+    data.cursor(:, :, self.data_ix) = [[[self.curs_active.x]; [self.curs_active.y]] nan(2, 10-length(self.curs_active))];
+    data.cursor_ids(:, self.data_ix) = [[self.curs_active.id]'; nan(10-length(self.curs_active), 1)];
+  end
+  data.target_pos(:, self.data_ix) = self.active_target_position';
+  data.time(self.data_ix) = self.t_update;
+
+  % Send DIO trigger
+  if self.is_dioPort
+    % FIXME: need to figure out how to send self.data_ix information
+    %           IOPort('Write', self.dioPort, ['d', lower(dec2hex(rem(self.data_ix, 10)))], 0);
+    IOPort('Write', self.dioPort, ['d', char(rem(self.data_ix, 256))], 0);
+    %           writeline(self.dioPort, 'd');
+  end
 end
 
 
