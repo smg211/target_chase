@@ -145,6 +145,7 @@ else
   info = GetTouchDeviceInfo(self.dev);
   disp(info);
 end
+input_mode = 'mouse';
 
 % Define black and white
 white = WhiteIndex(screenId);
@@ -601,7 +602,7 @@ for ix = 1:length(x_cm)
 end
 
 % trial counter location (opposite of photodiode)
-trlcnt_position_cm = [width_mm/20 - nudge_right_edge_in_by_mm/10 - 1.5, (-height_mm/20 + raise_botton_edge_by_mm/10 + 1.5)];
+trlcnt_position_cm = [width_mm/20 - nudge_right_edge_in_by_mm/10 - 1.5, (-height_mm/20 + raise_botton_edge_by_mm/10 + 0.5)];
 self.trlcnt_position_px = cm2pix(trlcnt_position_cm, self.res);
 
 %% DATA SAVING
