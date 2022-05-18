@@ -8,6 +8,7 @@ end
 sca;
 close all;
 clear;
+rng('shuffle');
 
 Screen('Preference', 'ConserveVRAM', 4096);
 Screen('Preference', 'SkipSyncTests', 1);
@@ -62,20 +63,19 @@ end
 
 % Eyetracker Triggers
 try
-  lineTerminator = 10;
-  baudRate = 9600;
-  portSpec = 'COM6'; % COM 6
+%   lineTerminator = 10;
+%   baudRate = 9600;
+%   portSpec = 'COM6'; % COM 6
+% 
+%   portSettings = sprintf('BaudRate=%i Terminator=%i', baudRate, lineTerminator);
+%   self.iscanPort = IOPort('OpenSerialPort', portSpec, portSettings);
 
-  portSettings = sprintf('BaudRate=%i Terminator=%i', baudRate, lineTerminator);
-  self.iscanPort = IOPort('OpenSerialPort', portSpec, portSettings);
-
-%   self.iscanPort = serialport('COM6', 115200);
-%   configureTerminator(self.iscanPort,"CR/LF");
+  self.iscanPort = serialport('COM6', 115200);
+  configureTerminator(self.iscanPort,"CR/LF");
 
   % send start recording trigger
-  IOPort('Write', self.iscanPort, 'e', 0);
-  IOPort('Write', self.iscanPort, 's', 0);
-%   writeline(self.iscanPort, 's');
+%   IOPort('Write', self.iscanPort, 'e', 0);
+%   IOPort('Write', self.iscanPort, 's', 0);
 
   self.is_iscanPort = true;
 catch
@@ -329,7 +329,7 @@ try
             params.(param_info(i_params_shown(i_param)).varname) = param_info(i_params_shown(i_param)).opts_varname{i_opt};
           end
         end
-        if all(opt_chosen(find([param_info.require_selection])) > 0)
+        if all(opt_chosen(find([param_info(i_params_shown).require_selection])) > 0)
           if check_if_click_in_rect([self.curs_active(id).x, self.curs_active(id).y], row_bg_rect(:, end))
             play_pressed = true;
           end
@@ -368,8 +368,8 @@ params.exit_hold = 2;
 params.reward_dur = 0.75;
 params.outlineWidth = 4;
 params.rew_scale_method = 'adaptive';
-params.max_rew_pthresh = 0.75;
-params.min_rew_pthresh = 0.25;
+params.max_rew_pthresh = 0.25;
+params.min_rew_pthresh = 0.75;
 
 %% PROCESS ALL PARAMETERS FOR THE TASK
 % set all of the unentered parameters to their default values
@@ -398,19 +398,23 @@ if params.button_hold_time == false
   self.use_button = false;
 elseif isstr(params.button_hold_time)
   tmp = strsplit(params.button_hold_time, '-');
-  params.button_hold_time = [];
+  params.effective_button_hold_time = [];
   for i = 1:length(tmp)
-    params.button_hold_time(i) = str2num(tmp{i});
+    params.effective_button_hold_time(i) = str2num(tmp{i});
   end
+else
+  params.effective_button_hold_time = params.button_hold_time;
 end
 
 % determine what the range of target hold times may be
 if isstr(params.target_hold_time)
   tmp = strsplit(params.target_hold_time, '-');
-  params.target_hold_time = [];
+  params.effective_target_hold_time = [];
   for i = 1:length(tmp)
-    params.target_hold_time(i) = str2num(tmp{i});
+    params.effective_target_hold_time(i) = str2num(tmp{i});
   end
+else
+  params.effective_target_hold_time = params.target_hold_time;
 end
 
 % are we going to reward button holds?
@@ -450,9 +454,12 @@ if strcmp(params.rew_scale_method, 'absolute')
   params.time_thresh_for_min_rew = ...
     targ1on2touch_fast+targon2touch_slow*(self.num_targets-1)+params.intertarg_delay*(self.num_targets-1);
 elseif strcmp(params.rew_scale_method, 'adaptive')
-  params.time_thresh_for_max_rew = Inf;
-  params.time_thresh_for_min_rew = -Inf;
+  params.time_thresh_for_max_rew = -Inf;
+  params.time_thresh_for_min_rew = Inf;
 end
+
+self.time_thresh_for_max_rew = params.time_thresh_for_max_rew;
+self.time_thresh_for_min_rew = params.time_thresh_for_min_rew;
 
 %% GET TARGET POSITIONS
 
@@ -611,7 +618,7 @@ self.trlcnt_position_px = cm2pix(trlcnt_position_cm, self.res);
 % params.save_interval = params.break_dur;
 
 % how frequently to sample the data for storing
-params.update_freq = 100; %120;
+params.update_freq = 200; %120;
 update_interval = 1/params.update_freq;
 
 % determine name of file
@@ -689,7 +696,7 @@ self.FSM = FSM;
 
 %% PRELOAD SOUNDS
 try
-  wavfilenames = {'reward1.wav', 'reward2.wav', 'C.wav', 'DoorBell.wav'};
+  wavfilenames = {'reward1.mp3', 'A32.mp3', 'C.mp3', 'DoorBell.wav'};
   nfiles = length(wavfilenames);
 
   % Always init to 2 channels, for the sake of simplicity:
@@ -702,7 +709,7 @@ try
   % and a required latencyclass of 1 == standard low-latency mode, as well as
   % default playback frequency and 'nrchannels' sound output channels.
   % This returns a handle 'pahandle' to the audio device:
-  self.pahandle = PsychPortAudio('Open', 2, [], 1, [], nrchannels);
+  self.pahandle = PsychPortAudio('Open', 2, [], 0, [], nrchannels);
 
   % Get what frequency we are actually using for playback:
   self.soundstatus = PsychPortAudio('GetStatus', self.pahandle);
@@ -781,23 +788,23 @@ try
       end
     end
     
-    lineTerminator = 13;
-    baudRate = 19200;
-    portSpec = prolific_com;
+%     lineTerminator = 13;
+%     baudRate = 19200;
+%     portSpec = prolific_com;
+%     
+%     portSettings = sprintf('BaudRate=%i Terminator=%i', baudRate, lineTerminator);
+%     self.rewardPort = IOPort('OpenSerialPort', portSpec, portSettings);
     
-    portSettings = sprintf('BaudRate=%i Terminator=%i', baudRate, lineTerminator);
-    self.rewardPort = IOPort('OpenSerialPort', portSpec, portSettings);
-    
-%     self.rewardPort = serialport(prolific_com, 19200);
-%     configureTerminator(self.rewardPort, "CR");
+    self.rewardPort = serialport(prolific_com, 19200);
+    configureTerminator(self.rewardPort, 'CR');
 
     % Setup the flow rate
-    IOPort('Write', self.rewardPort, 'VOL 0.5', 0);
-    IOPort('Write', self.rewardPort, 'VOL ML', 0);
-    IOPort('Write', self.rewardPort, 'RAT 50MM', 0);
-%     writeline(self.rewardPort, 'VOL 0.5');
-%     writeline(self.rewardPort, 'VOL ML');
-%     writeline(self.rewardPort, 'RAT 50MM');
+%     IOPort('Write', self.rewardPort, 'VOL 0.5', 0);
+%     IOPort('Write', self.rewardPort, 'VOL ML', 0);
+%     IOPort('Write', self.rewardPort, 'RAT 50MM', 0);
+    writeline(self.rewardPort, 'VOL 0.5');
+    writeline(self.rewardPort, 'VOL ML');
+    writeline(self.rewardPort, 'RAT 50MM');
   end
 
   self.is_rewardPort = true;
@@ -951,6 +958,12 @@ if self.is_buttonPort
   flush(self.buttonPort);
 end
 
+if self.is_iscanPort
+  writeline(self.iscanPort, 'e');
+  WaitSecs(1);
+  writeline(self.iscanPort, 's');
+end
+
 %% START THE GAME
 if ~hit_escape
   try
@@ -989,10 +1002,10 @@ if ~hit_escape
         end
         
         % Run the update function
-        [self, data] = update(self, params, data);
+        self = update(self, params);
         
         % collect the data
-        data = collect_data(self, data);
+        [self, data] = collect_data(self, data);
       end
     end
     
@@ -1026,8 +1039,8 @@ if ~hit_escape
 
   % Stop ISCAN recording
   if self.is_iscanPort
-    IOPort('Write', self.iscanPort, 'e', 0);
-%     writeline(self.iscanPort, 'e');
+%     IOPort('Write', self.iscanPort, 'e', 0);
+    writeline(self.iscanPort, 'e');
   end
   
   %% DISPLAY THE SESSION SUMMARY SCREEN AND SAVE THE DATA
@@ -1036,7 +1049,7 @@ if ~hit_escape
   stats_str{1} = num2str(self.trials_started);
   stats_str{2} = num2str(self.trials_correct);
   stats_str{3} = [num2str(round(100*self.trials_correct/self.trials_started)) ' %'];
-  stats_str{4} = [num2str(params.target_hold_time) ' sec'];
+  stats_str{4} = [num2str(params.effective_target_hold_time) ' sec'];
   stats_str{5} = [num2str(params.target_rad) ' cm'];
   stats_str{6} = [num2str(params.last_targ_reward) ' sec'];
   
@@ -1419,7 +1432,7 @@ function wrapup_touch(self)
 end
 
 %% UPDATE FUNCTION
-function [self, data] = update(self, params, data)
+function self = update(self, params)
   funcs = fieldnames(self.FSM.(self.state));
   for f = 1:length(funcs)
     self.state_length = GetSecs - self.state_start;
@@ -1548,26 +1561,26 @@ function self = xstart_taskbreak(self, params)
   % Set ITI and hold times for this trial
   self.ITI = normrnd(params.ITI_mean, params.ITI_std);
 
-  if length(params.target_hold_time) == 2
-    self.tht = min(params.target_hold_time) + rand*range(params.target_hold_time);
+  if length(params.effective_target_hold_time) == 2
+    self.tht = min(params.effective_target_hold_time) + rand*range(params.effective_target_hold_time);
   else
-    self.tht = params.target_hold_time;
+    self.tht = params.effective_target_hold_time;
   end
 
-  if length(params.button_hold_time) == 2
-    self.bht = min(params.button_hold_time) + rand*range(params.button_hold_time);
+  if length(params.effective_button_hold_time) == 2
+    self.bht = min(params.effective_button_hold_time) + rand*range(params.effective_button_hold_time);
   else
-    self.bht = params.button_hold_time;
+    self.bht = params.effective_button_hold_time;
   end
   
   % Set the threshold for reward scaling
   if strcmp(params.rew_scale_method, 'adaptive') && self.block_ix >= 2
-    params.time_thresh_for_max_rew = norminv(params.max_rew_pthresh, ...
+    self.time_thresh_for_max_rew = norminv(params.max_rew_pthresh, ...
       mean(self.seq_completion_time), std(self.seq_completion_time));
-    params.time_thresh_for_min_rew = norminv(params.min_rew_pthresh, ...
+    self.time_thresh_for_min_rew = norminv(params.min_rew_pthresh, ...
       mean(self.seq_completion_time), std(self.seq_completion_time));
     
-    fprintf(['Maximum reward threshold is: ' num2str(params.time_thresh_for_max_rew) '\n']);
+    fprintf(['Maximum reward threshold is: ' num2str(self.time_thresh_for_max_rew) '\n']);
   end
 
   % Get the position of random targets
@@ -1605,7 +1618,7 @@ end
 
 %% VIDEO TRIGGER FUNCTIONS
 function self = xstart_vid_trig(self, params)
-  if self.trials_correct == 0
+  if self.trials_started == 0
     WaitSecs(1);
   end
 
@@ -1795,7 +1808,7 @@ end
 
 function [flag, self] = touch_target(self, params)
   % if there is a touch, see if it happens in the target area
-  if ~(params.target_hold_time == 0 && self.target_index ~= self.num_targets)
+  if ~(params.effective_target_hold_time == 0 && self.target_index ~= self.num_targets)
     if params.drag_ok
       flag = check_if_click_in_targ(self.curs_active, self.target_positions_px(self.target_index, :), self.effective_target_rad_px);
     else
@@ -1810,7 +1823,7 @@ function [flag, self] = touch_target_nohold(self, params)
   % this function combines touch_target and finish_targ_hold so that the
   % entire targ_hold state can be skipped to save time
 
-  if params.target_hold_time == 0 && self.target_index ~= self.num_targets
+  if params.effective_target_hold_time == 0 && self.target_index ~= self.num_targets
     if params.drag_ok
       flag = check_if_click_in_targ(self.curs_active, self.target_positions_px(self.target_index, :), self.effective_target_rad_px);
     else
@@ -1908,6 +1921,9 @@ end
 function self = xstart_reward(self, params)
   self.trials_correct = self.trials_correct + 1;
   self.t_reward_start = GetSecs;
+
+  % play the correct trial reward sound
+  self = playsound(self, 1);
   
   if params.intertarg_delay ~= 0 || rem(self.num_targets, 2) == 0
     self.pdColor = [1 1 1];
@@ -1920,19 +1936,16 @@ function self = xstart_reward(self, params)
   Screen('FillOval', self.w, self.pdColor, self.pdRect, self.pdDiameter);
   Screen('Flip', self.w, 0, 0, 1);
 
-  % play the correct trial reward sound
-  self = playsound(self, 1);
-
   % dispense the juice reward
   if self.do_rewardScaling 
     if strcmp(params.rew_scale_method, 'absolute')
-      if self.trial_completion_time < params.time_thresh_for_max_rew
+      if self.trial_completion_time < self.time_thresh_for_max_rew
         rew_time = params.last_targ_reward;
       else
         rew_time = params.min_targ_reward;
       end
     elseif strcmp(params.rew_scale_method, 'adaptive')
-      if self.seq_completion_time(end) < params.time_thresh_for_max_rew
+      if self.seq_completion_time(end) < self.time_thresh_for_max_rew
         rew_time = params.last_targ_reward;
       else
         rew_time = params.min_targ_reward;
@@ -2005,12 +2018,11 @@ function self = playsound(self, sound_ix)
   if self.is_audioPort
     % Query current playback status:
     self.soundstatus = PsychPortAudio('GetStatus', self.pahandle);
-  
+    
     % Engine still running on a schedule?
     if self.soundstatus.Active == 1
       PsychPortAudio('Stop', self.pahandle, 0, 1);
     end
-  
     %   if self.soundstatus.Active == 0
     % Schedule finished, engine stopped. Before adding new
     % slots we first must delete the old ones, ie., reset the
@@ -2034,12 +2046,12 @@ end
 function write_juice_reward(self, params, rew_time)
   if self.is_rewardPort
     volume2dispense = rew_time*50/60; % mL/min x 1 min/60 sec --> sec x mL/sec
-    rew_str = sprintf(["VOL %0.1f"], volume2dispense);
-    IOPort('Write', self.rewardPort, rew_str, 0);
-%     writeline(self.rewardPort, rew_str);
+    rew_str = sprintf('VOL %0.1f', volume2dispense);
+%     IOPort('Write', self.rewardPort, rew_str, 1);
+    writeline(self.rewardPort, rew_str);
     WaitSecs(0.05);
-    IOPort('Write', self.rewardPort, "RUN", 0);
-%     writeline(self.rewardPort, "RUN");
+%     IOPort('Write', self.rewardPort, 'RUN', 1);
+    writeline(self.rewardPort, 'RUN');
   end
 end
 
@@ -2051,7 +2063,7 @@ end
 
 
 %% DATA COLLECTION
-function data = collect_data(self, data)
+function [self, data] = collect_data(self, data)
   % collect the data
   self.data_ix = self.data_ix+1;
 
@@ -2069,8 +2081,8 @@ function data = collect_data(self, data)
   % Send DIO trigger
   if self.is_dioPort
     % FIXME: need to figure out how to send self.data_ix information
-    %           IOPort('Write', self.dioPort, ['d', lower(dec2hex(rem(self.data_ix, 10)))], 0);
-    IOPort('Write', self.dioPort, ['d', char(rem(self.data_ix, 256))], 0);
+    IOPort('Write', self.dioPort, ['d', lower(dec2hex(rem(self.data_ix, 10)))], 0);
+%     IOPort('Write', self.dioPort, ['d', char(rem(self.data_ix, 255))], 0);
     %           writeline(self.dioPort, 'd');
   end
 end

@@ -14,8 +14,8 @@ param_info(2).varname = 'juicer';
 param_info(2).opts_title = {'Old Yellow', 'New Red'};
 param_info(2).opts_varname = {'yellow', 'red'};
 param_info(2).default_opt = {'red'};
-param_info(2).require_selection = true;
-param_info(2).is_hidden = false;
+param_info(2).require_selection = false;
+param_info(2).is_hidden = true;
 
 param_info(3).title = 'Button Type';
 param_info(3).varname = 'button_version';
@@ -35,8 +35,8 @@ param_info(4).is_hidden = false;
 
 param_info(5).title = 'Target 2+ Timeout';
 param_info(5).varname = 'target_timeout_time';
-param_info(5).opts_title = {'0.7 sec', '0.8 sec', '0.9 sec', '1.0 sec', '1.1 sec', '1.2 sec', '1.3 sec', '1.5 sec', '2.0 sec', '2.5 sec', '3.0 sec', '3.5 sec', '4.0 sec'};
-param_info(5).opts_varname = {0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0};
+param_info(5).opts_title = {'0.5 s', '0.6 s', '0.7 s', '0.8 s', '0.9 s', '1.0 s', '1.1 s', '1.2 s', '1.3 s', '1.5 s', '2.0 s', '2.5 s', '3.0 s', '3.5 s', '4.0 s'};
+param_info(5).opts_varname = {0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0};
 param_info(5).default_opt = Inf;
 param_info(5).require_selection = false;
 param_info(5).is_hidden = false;
