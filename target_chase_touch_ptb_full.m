@@ -99,7 +99,11 @@ end
 cwd = pwd;
 if ispc
   if any(strfind(cwd, 'sando'))
-    user = 'sando';
+    if exist('C:\Users\sando\Documents\dummy')
+      user = 'sando_pc';
+    else
+      user = 'sando';
+    end
     last_param_path = 'C:\Users\sando\Documents\';
     data_path = 'C:\Users\sando\Box\Data\NHP_BehavioralData\target_chase\';
   end
@@ -145,7 +149,10 @@ else
   info = GetTouchDeviceInfo(self.dev);
   disp(info);
 end
-input_mode = 'mouse';
+
+if strcmp(user, 'sando_pc')
+  input_mode = 'mouse';
+end
 
 % Define black and white
 white = WhiteIndex(screenId);
@@ -369,7 +376,7 @@ params.exit_hold = 2;
 params.reward_dur = 0.75;
 params.outlineWidth = 4;
 params.rew_scale_method = 'adaptive';
-params.max_rew_pthresh = 0.25;
+params.max_rew_pthresh = 0.5;
 params.min_rew_pthresh = 0.75;
 
 %% PROCESS ALL PARAMETERS FOR THE TASK
