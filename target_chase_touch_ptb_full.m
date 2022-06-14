@@ -8,7 +8,6 @@ end
 sca;
 close all;
 clear;
-rng('shuffle');
 
 Screen('Preference', 'ConserveVRAM', 4096);
 Screen('Preference', 'SkipSyncTests', 1);
@@ -84,7 +83,17 @@ end
 
 % Button
 try
-  self.buttonPort = serialport("COM15", 9600);
+
+  % added Hoseok 052622
+  portinfo = getSCPInfo;
+  for c = 1:length(portinfo)
+    if any(strfind(portinfo(c).description, 'USB-SERIAL CH340'))
+      prolific_com2 = portinfo(c).device;
+      break
+    end
+  end
+  self.buttonPort = serialport(prolific_com2, 9600);
+%   self.buttonPort = serialport("COM22", 9600);
   configureTerminator(self.buttonPort, 'CR/LF');
   flush(self.buttonPort);
   readline(self.buttonPort);
@@ -704,7 +713,7 @@ self.FSM = FSM;
 
 %% PRELOAD SOUNDS
 try
-  wavfilenames = {'reward1.mp3', 'A32.mp3', 'C.mp3', 'DoorBell.wav'};
+  wavfilenames = {'reward1.mp3', 'A32.mp3', 'C.mp3', 'DoorBell.mp3'};
   nfiles = length(wavfilenames);
 
   % Always init to 2 channels, for the sake of simplicity:
@@ -1287,6 +1296,7 @@ function targpos = get_targpos_from_str(pos_str, center_position, grid_spacing, 
 end
 
 function [self, params] = make_random_sequence(self, params, change_string, output_pos_px)
+  rng('shuffle');
   pos_str_opts = {'upper_left', 'upper_middle', 'upper_right', 'middle_left', ...
     'center', 'middle_right', 'lower_left', 'lower_middle', 'lower_right'};
 
