@@ -1023,6 +1023,19 @@ if ~hit_escape
         
         % collect the data
         [self, data] = collect_data(self, data);
+        
+        % save the data at the start of each taskbreak
+        if self.start_taskbreak
+          raw = data;
+          raw.cursor = pix2cm_batch(raw.cursor, self.res);
+          raw.target_pos = pix2cm_batch(raw.target_pos, self.res);
+          save([filename '_block' num2str(self.block_ix-1) '.mat'], 'raw', '-v7.3');
+
+          data = [];
+          self.data_ix = 0;
+
+          self.start_taskbreak = false;
+        end
       end
     end
     
@@ -1031,10 +1044,15 @@ if ~hit_escape
     end
   catch
     % Save the data
+%     raw = data;
+%     raw.cursor = pix2cm_batch(raw.cursor, self.res);
+%     raw.target_pos = pix2cm_batch(raw.target_pos, self.res);
+%     save([filename '.mat'], 'raw', '-v7.3');
+
     raw = data;
     raw.cursor = pix2cm_batch(raw.cursor, self.res);
     raw.target_pos = pix2cm_batch(raw.target_pos, self.res);
-    save([filename '.mat'], 'raw', '-v7.3');
+    save([filename '_block' num2str(self.block_ix) '.mat'], 'raw', '-v7.3');
     
     TouchQueueRelease(self.dev);
     RestrictKeysForKbCheck([]);
@@ -1091,9 +1109,38 @@ if ~hit_escape
   Screen('Flip', self.w, 0, 0, 1);
   
   % Save the data
+%   raw = data;
+%   raw.cursor = pix2cm_batch(raw.cursor, self.res);
+%   raw.target_pos = pix2cm_batch(raw.target_pos, self.res);
+%   save([filename '.mat'], 'raw', '-v7.3');
+
   raw = data;
   raw.cursor = pix2cm_batch(raw.cursor, self.res);
   raw.target_pos = pix2cm_batch(raw.target_pos, self.res);
+  save([filename '_block' num2str(self.block_ix) '.mat'], 'raw', '-v7.3');
+  
+  % load all the individully saved block files, concatenate them, and then
+  % delete the block files
+  dirdat = dir(data_path);
+  i_file = find(contains({dirdat.name}, [lower(params.animal_name) '_' params.start_time]));
+  
+  raw = [];
+  for i = 1:self.block_ix
+    for i2 = 1:length(i_file)
+      if contains(dirdat(i_file(i2)).name, ['block' num2str(i) '.mat'])
+        tmp = load([data_path filesep dirdat(i_file(i)).name]);
+      end
+    end
+    if isempty(raw)
+      raw = tmp.raw;
+    else
+      raw.state = [raw.state tmp.raw.state];
+      raw.cursor = cat(3, raw.cursor, tmp.raw.cursor);
+      raw.cursor_ids = [raw.cursor_ids tmp.raw.cursor_ids];
+      raw.target_pos = [raw.target_pos tmp.raw.target_pos];
+      raw.time = [raw.time tmp.raw.time];
+    end
+  end
   save([filename '.mat'], 'raw', '-v7.3');
   
   % Rewrite the stats but change the header to allow for quitting
@@ -1553,6 +1600,7 @@ end
 function self = xstart_taskbreak(self, params)
   if params.break_trl == 0
     self.this_breakdur = 0;
+    self.start_taskbreak = false;
   else
     if self.trials_correct == self.next_break_trl
       % Play the doorbell sound
@@ -1562,8 +1610,11 @@ function self = xstart_taskbreak(self, params)
       self.this_breakdur = params.break_dur;
       self.next_break_trl = self.next_break_trl + params.break_trl;
       self.block_ix = self.block_ix + 1;
+
+      self.start_taskbreak = true;
     else
       self.this_breakdur = 0;
+      self.start_taskbreak = false;
     end
   end
 
@@ -1669,9 +1720,18 @@ function [flag, self] = button_pressed(self, params)
   if ~self.use_button || ~self.is_buttonPort
     flag = true;
   else
-    % flush the button port and then read the most recent value
-    flush(self.buttonPort);
-    button_data = readline(self.buttonPort);
+    try
+      % flush the button port and then read the most recent value
+      flush(self.buttonPort);
+      button_data = readline(self.buttonPort);
+    catch
+      fprintf('Cannot get button data \n');
+%       button_data = '0';
+%       self.buttonPort = serialport(prolific_com2, 9600);
+% %   self.buttonPort = serialport("COM22", 9600);
+%       configureTerminator(self.buttonPort, 'CR/LF');
+%       flush(self.buttonPort);
+    end
 
     % determine if the values indicate a button press or not
     if strcmp(params.button_version, 'fsr')
