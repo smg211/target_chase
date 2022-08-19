@@ -1039,6 +1039,8 @@ if ~hit_escape
       end
     end
     
+    WaitSecs(7); % wait some time for NHP to get arm back in chair since touching while saving can cause delays/crashes
+
     if strcmp(params.input_mode, 'touch')
       wrapup_touch(self);
     end
@@ -1603,6 +1605,11 @@ function self = xstart_taskbreak(self, params)
     self.start_taskbreak = false;
   else
     if self.trials_correct == self.next_break_trl
+      % send trigger to MCS to start stim
+      if strcmp(params.stim_epoch, 'breaks')
+        writeline(self.iscanPort, 't');
+      end
+
       % Play the doorbell sound
       self = playsound(self, 4);
 
@@ -1679,9 +1686,15 @@ end
 
 function [flag, self] = end_taskbreak(self, params)
   if self.this_breakdur > 0 && self.state_length > self.this_breakdur
+    % send trigger to MCS to end stim
+    if strcmp(params.stim_epoch, 'breaks')
+      writeline(self.iscanPort, 't');
+    end
+
     % play doorbell sound
     self = playsound(self, 4);
   end
+
   flag = self.state_length > self.this_breakdur;
 end
 

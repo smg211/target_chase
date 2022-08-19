@@ -180,16 +180,16 @@ param_info(22).is_hidden = false;
 
 param_info(23).title = 'Num Correct til Break';
 param_info(23).varname = 'break_trl';
-param_info(23).opts_title = {'NO Break', '10 trials', '15 trials', '20 trials', '25 trials'};
-param_info(23).opts_varname = {0, 10, 15, 20, 25};
+param_info(23).opts_title = {'NO Break', '5 trials', '10 trials', '15 trials', '20 trials', '25 trials'};
+param_info(23).opts_varname = {0, 5, 10, 15, 20, 25};
 param_info(23).default_opt = 0;
 param_info(23).require_selection = true;
 param_info(23).is_hidden = false;
 
 param_info(24).title = 'Break Length';
 param_info(24).varname = 'break_dur';
-param_info(24).opts_title = {'0.5 min', '1.0 min', '1.5 min', '2.0 min', '2.5 min'};
-param_info(24).opts_varname = {30, 60, 90, 120, 150};
+param_info(24).opts_title = {'10 sec', '15 sec', '20 sec', '30 sec', '60 sec', '90 sec'}; %, '2.0 min', '2.5 min'};
+param_info(24).opts_varname = {10, 15, 20, 30, 60, 90}; % 120, 150};
 param_info(24).default_opt = [];
 param_info(24).require_selection = true;
 param_info(24).is_hidden = false;
@@ -282,6 +282,14 @@ param_info(35).default_opt = 0.2;
 param_info(35).require_selection = false;
 param_info(35).is_hidden = true;
 
+param_info(36).title = 'Stim?';
+param_info(36).varname = 'stim_epoch';
+param_info(36).opts_title = {'NO STIM', 'Stim on breaks'};
+param_info(36).opts_varname = {false, 'breaks'};
+param_info(36).default_opt = false;
+param_info(36).require_selection = true;
+param_info(36).is_hidden = false;
+
 % get the number of options for each parameter
 for i = 1:length(param_info)
   param_info(i).Nopts = length(param_info(i).opts_title);
@@ -289,11 +297,13 @@ for i = 1:length(param_info)
 end
 
 %% Save
-cwd = pwd;
-if ispc
-  if any(strfind(cwd, 'sando'))
-    user = 'sando';
-    tcpath = 'C:\Users\sando\Documents\target_chase\';
-  end
-end
+path = mfilename('fullpath');
+tcpath = path(1:end-12);
+% cwd = pwd;
+% if ispc
+%   if any(strfind(cwd, 'sando'))
+%     user = 'sando';
+%     tcpath = 'C:\Users\sando\Documents\target_chase\';
+%   end
+% end
 save([tcpath 'param_screen.mat'], 'param_info', '-v7.3')
