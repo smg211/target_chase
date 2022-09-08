@@ -284,8 +284,8 @@ param_info(35).is_hidden = true;
 
 param_info(36).title = 'Stim?';
 param_info(36).varname = 'stim_epoch';
-param_info(36).opts_title = {'NO STIM', 'Stim on breaks'};
-param_info(36).opts_varname = {false, 'breaks'};
+param_info(36).opts_title = {'NO STIM', 'All breaks', 'Breaks 1-2'};
+param_info(36).opts_varname = {false, 'allbreaks', 'breaks1_2'};
 param_info(36).default_opt = false;
 param_info(36).require_selection = true;
 param_info(36).is_hidden = false;

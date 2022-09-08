@@ -76,6 +76,11 @@ try
 %   IOPort('Write', self.iscanPort, 'e', 0);
 %   IOPort('Write', self.iscanPort, 's', 0);
 
+  % send a stim trigger since establishing the connection will automatically
+  % send a start trigger
+  WaitSecs(3);
+  writeline(self.iscanPort, 't');
+
   self.is_iscanPort = true;
 catch
   self.is_iscanPort = false;
@@ -1121,29 +1126,29 @@ if ~hit_escape
   raw.target_pos = pix2cm_batch(raw.target_pos, self.res);
   save([filename '_block' num2str(self.block_ix) '.mat'], 'raw', '-v7.3');
   
-  % load all the individully saved block files, concatenate them, and then
-  % delete the block files
-  dirdat = dir(data_path);
-  i_file = find(contains({dirdat.name}, [lower(params.animal_name) '_' params.start_time]));
-  
-  raw = [];
-  for i = 1:self.block_ix
-    for i2 = 1:length(i_file)
-      if contains(dirdat(i_file(i2)).name, ['block' num2str(i) '.mat'])
-        tmp = load([data_path filesep dirdat(i_file(i)).name]);
-      end
-    end
-    if isempty(raw)
-      raw = tmp.raw;
-    else
-      raw.state = [raw.state tmp.raw.state];
-      raw.cursor = cat(3, raw.cursor, tmp.raw.cursor);
-      raw.cursor_ids = [raw.cursor_ids tmp.raw.cursor_ids];
-      raw.target_pos = [raw.target_pos tmp.raw.target_pos];
-      raw.time = [raw.time tmp.raw.time];
-    end
-  end
-  save([filename '.mat'], 'raw', '-v7.3');
+%   % load all the individully saved block files, concatenate them, and then
+%   % delete the block files
+%   dirdat = dir(data_path);
+%   i_file = find(contains({dirdat.name}, [lower(params.animal_name) '_' params.start_time]));
+%   
+%   raw = [];
+%   for i = 1:self.block_ix
+%     for i2 = 1:length(i_file)
+%       if contains(dirdat(i_file(i2)).name, ['block' num2str(i) '.mat'])
+%         tmp = load([data_path filesep dirdat(i_file(i)).name]);
+%       end
+%     end
+%     if isempty(raw)
+%       raw = tmp.raw;
+%     else
+%       raw.state = [raw.state tmp.raw.state];
+%       raw.cursor = cat(3, raw.cursor, tmp.raw.cursor);
+%       raw.cursor_ids = [raw.cursor_ids tmp.raw.cursor_ids];
+%       raw.target_pos = [raw.target_pos tmp.raw.target_pos];
+%       raw.time = [raw.time tmp.raw.time];
+%     end
+%   end
+%   save([filename '.mat'], 'raw', '-v7.3');
   
   % Rewrite the stats but change the header to allow for quitting
   Screen('TextSize', self.w, round(cm2pix(1, self.res)));
@@ -1569,6 +1574,8 @@ function [flag, self] = exit_buttons_held(self, params)
   if all(exit_touchdur > params.exit_hold) || KbCheck
     self.idle = false;
     flag = true;
+    Screen('FillRect', self.w, [0 0 0]);
+    Screen('Flip', self.w, 0, 0, 1);
   else
     flag = false;
   end
@@ -1606,7 +1613,8 @@ function self = xstart_taskbreak(self, params)
   else
     if self.trials_correct == self.next_break_trl
       % send trigger to MCS to start stim
-      if strcmp(params.stim_epoch, 'breaks')
+      if strcmp(params.stim_epoch, 'allbreaks') || ...
+          (strcmp(params.stim_epoch, 'breaks1_2') && any([1 2] == self.block_ix))
         writeline(self.iscanPort, 't');
       end
 
@@ -1687,7 +1695,8 @@ end
 function [flag, self] = end_taskbreak(self, params)
   if self.this_breakdur > 0 && self.state_length > self.this_breakdur
     % send trigger to MCS to end stim
-    if strcmp(params.stim_epoch, 'breaks')
+    if strcmp(params.stim_epoch, 'allbreaks') || ...
+        (strcmp(params.stim_epoch, 'breaks1_2') && any([2 3] == self.block_ix))
       writeline(self.iscanPort, 't');
     end
 
