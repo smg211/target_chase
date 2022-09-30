@@ -486,7 +486,7 @@ self.time_thresh_for_min_rew = params.time_thresh_for_min_rew;
 %% GET TARGET POSITIONS
 
 % load possible randomly-generated sequences
-load('seq_poss.mat');
+load('seq_poss_v2.mat');
 params.seq_poss = seq_poss;
 
 % determine the center position and distance from center to top/bottom
