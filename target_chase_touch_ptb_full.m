@@ -90,14 +90,14 @@ end
 try
 
   % added Hoseok 052622
-  portinfo = getSCPInfo;
-  for c = 1:length(portinfo)
-    if any(strfind(portinfo(c).description, 'USB-SERIAL CH340'))
-      prolific_com2 = portinfo(c).device;
-      break
-    end
-  end
-  self.buttonPort = serialport(prolific_com2, 9600);
+%   portinfo = getSCPInfo;
+%   for c = 1:length(portinfo)
+%     if any(strfind(portinfo(c).description, 'USB-SERIAL CH340'))
+%       prolific_com2 = portinfo(c).device;
+%       break
+%     end
+%   end
+  self.buttonPort = serialport('COM33', 9600);
 %   self.buttonPort = serialport("COM22", 9600);
   configureTerminator(self.buttonPort, 'CR/LF');
   flush(self.buttonPort);
@@ -106,6 +106,27 @@ try
   self.is_buttonPort = true;
 catch
   self.is_buttonPort = false;
+end
+
+% Override Switch
+try
+%   portinfo = getSCPInfo;
+%   for c = 1:length(portinfo)
+%     if any(strfind(portinfo(c).description, 'USB-SERIAL CH340')) && ...
+%         ~strcmp(prolific_com2, portinfo(c).device)
+%       prolific_com3 = portinfo(c).device;
+%       break
+%     end
+%   end
+  self.overridePort = serialport('COM4', 9600);
+%   self.buttonPort = serialport("COM22", 9600);
+  configureTerminator(self.overridePort, 'CR/LF');
+  flush(self.overridePort);
+  readline(self.overridePort);
+
+  self.is_overridePort = true;
+catch
+  self.is_overridePort = false;
 end
 
 %% GET SYSTEM AND DISPLAY INFORMATION
@@ -836,7 +857,7 @@ end
 
 %% ADVANCE TO THE START SCREEN
 % Display all of the port checks
-check_title = {'Juicer Connected: ', 'Button Connected: ', 'DIO Port Connected: ', ...
+check_title = {'Juicer Connected: ', 'Button Connected: ', 'Override Switch Connected: ', 'DIO Port Connected: ', ...
   'ISCAN Port Connected: ', 'CamTrig Port Connected: ', 'Audio Port Connected: '};
 if self.is_rewardPort
   check_str{1} = 'YES';
@@ -848,25 +869,30 @@ if self.is_buttonPort
 else
   check_str{2} = 'NO';
 end
-if self.is_dioPort
+if self.is_overridePort
   check_str{3} = 'YES';
 else
   check_str{3} = 'NO';
 end
-if self.is_iscanPort
+if self.is_dioPort
   check_str{4} = 'YES';
 else
   check_str{4} = 'NO';
 end
-if self.is_camtrigPort
+if self.is_iscanPort
   check_str{5} = 'YES';
 else
   check_str{5} = 'NO';
 end
-if self.is_audioPort
+if self.is_camtrigPort
   check_str{6} = 'YES';
 else
   check_str{6} = 'NO';
+end
+if self.is_audioPort
+  check_str{7} = 'YES';
+else
+  check_str{7} = 'NO';
 end
 
 x_check_title = self.res.effective_width/5 + self.nudge_left_edge_in_by_px;
@@ -979,6 +1005,10 @@ data = [];
 if self.is_buttonPort
   flush(self.buttonPort);
 end
+if self.is_overridePort
+  flush(self.overridePort);
+end
+self.override_active = false;
 
 if self.is_iscanPort
   writeline(self.iscanPort, 'e');
@@ -1788,14 +1818,47 @@ function [flag, self] = finish_button_hold(self, params)
     flag = true;
   else
     if GetSecs - self.t_button_hold_start > self.bht
-      % play the button reward sound
-      self = playsound(self, 3);
-
-      % give a juice reward
-      if self.do_rewardButton
-        run_button_rew(self, params)
+      if self.is_overridePort
+        try
+          override_data = '';
+          while strcmp(override_data, '')
+            % flush the override port and then read the most recent value
+            flush(self.overridePort);
+            override_data = readline(self.overridePort);
+            if any(strfind(override_data, '1'))
+              do_stop = true;
+              fprintf('OVERRIDE ACTIVE');
+            elseif any(strfind(override_data, '0'))
+              do_stop = false;
+              fprintf('OVERRIDE INACTIVE');
+            end
+          end
+        catch
+          fprintf('Cannot get override switch data \n');
+          do_stop = false;
+          %       button_data = '0';
+          %       self.buttonPort = serialport(prolific_com2, 9600);
+          % %   self.buttonPort = serialport("COM22", 9600);
+          %       configureTerminator(self.buttonPort, 'CR/LF');
+          %       flush(self.buttonPort);
+        end
+      else
+        do_stop = false;
       end
-      flag = true;
+      
+      if ~do_stop
+        % play the button reward sound
+        self = playsound(self, 3);
+  
+        % give a juice reward
+        if self.do_rewardButton
+          run_button_rew(self, params)
+        end
+        flag = true;
+      else
+        flag = false;
+        self.override_active = true;
+      end
     else
       flag = false;
     end
@@ -1807,7 +1870,12 @@ function [flag, self] = early_leave_button_hold(self, params)
     flag = false;
   else
     if button_pressed(self, params)
-      flag = false;
+      if self.override_active
+        flag = true;
+        self.override_active = false;
+      else
+        flag = false;
+      end
     else
       flag = true;
     end
