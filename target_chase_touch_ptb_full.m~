@@ -549,8 +549,7 @@ if isstr(params.seq)
     params.target5_pos_str = 'none';
   elseif strcmp(params.seq, 'repeat') || strcmp(params.seq, '2seq-repeat')
     % we are repeating the same sequence that we did in the previous run of
-    % the task, at least some of the time, so determine what that sequence
-    % will be
+    % the t
     params.target1_pos_str = params_prev.target1_pos_str;
     params.target2_pos_str = params_prev.target2_pos_str;
     params.target3_pos_str = params_prev.target3_pos_str;
@@ -581,8 +580,6 @@ if isstr(params.seq)
   end
 end
 
-% if we are repeating the sequence from the previous run, then change the
-% definition of that sequence to what it was in the last run
 if strcmp(params.seq, 'repeat')
   params.seq = params_prev.seq;
 end
@@ -609,7 +606,6 @@ self.target_positions_px = cm2pix(self.target_positions_cm, self.res);
 self.target_positions_px_og = self.target_positions_px; 
 self.target_radius_px = cm2pix(params.target_rad, self.res);
 
-% determine the number of targets
 self.num_targets = length(~isnan(self.target_positions_cm(:, 1)));
 
 
@@ -649,7 +645,7 @@ self.pdRect = CenterRectOnPointd(pdRectBase, ...
     self.pd_position_px(1), self.pd_position_px(2));
 self.pdColor = [0.75 0.75 0.75];
 
-% Create the outlines for each target
+% Outlines construction
 x_cm = params.center_position(1) + [-params.grid_spacing:params.grid_spacing:params.grid_spacing];
 y_cm = params.center_position(2) + [-params.grid_spacing:params.grid_spacing:params.grid_spacing];
 
@@ -1708,7 +1704,7 @@ function self = xstart_taskbreak(self, params)
     self.time_thresh_for_min_rew = norminv(params.min_rew_pthresh, ...
       mean(self.seq_completion_time), std(self.seq_completion_time));
     
-%     fprintf(['Maximum reward threshold is: ' num2str(self.time_thresh_for_max_rew) '\n']);
+    fprintf(['Maximum reward threshold is: ' num2str(self.time_thresh_for_max_rew) '\n']);
   end
 
   % Get the position of random targets
